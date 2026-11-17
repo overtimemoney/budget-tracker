@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self'">
+<title>My Budget Tracker</title>
+<meta name="description" content="Private budget tracker. Your data never leaves this device.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#10131a">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="lockScreen" class="lock hidden">
+  <div class="lockCard">
+    <div class="lockIcon">🔒</div>
+    <h1>Budget Tracker</h1>
+    <p>Enter your PIN to unlock. Your data lives only on this device.</p>
+    <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" maxlength="12">
+    <button id="unlockBtn" class="primary">Unlock</button>
+    <p id="pinError" class="error"></p>
+  </div>
+</div>
+
+<header>
+  <div>
+    <h1>💰 My Budget</h1>
+    <p class="sub">Private — data never leaves this phone</p>
+  </div>
+  <button id="lockBtn" class="ghost hidden">Lock</button>
+</header>
+
+<main id="app" class="hidden">
+  <!-- HOME -->
+  <section id="view-home" class="view">
+    <div class="seg">
+      <button data-period="week" class="segBtn active">Week</button>
+      <button data-period="month" class="segBtn">Month</button>
+    </div>
+    <div class="periodNav">
+      <button id="prevPeriod" class="ghost">‹</button>
+      <div id="periodLabel" class="periodLabel"></div>
+      <button id="nextPeriod" class="ghost">›</button>
+    </div>
+    <div class="cards">
+      <div class="card big"><span>Spent</span><strong id="statSpent">$0.00</strong></div>
+      <div class="card"><span>Income</span><strong id="statIncome" class="green">$0.00</strong></div>
+      <div class="card"><span>Net</span><strong id="statNet">$0.00</strong></div>
+    </div>
+    <p id="paceLine" class="pace"></p>
+    <h2>Daily spending</h2>
+    <div id="dayBars" class="bars"></div>
+    <h2>Where it went</h2>
+    <div id="catList"></div>
+    <h2>Recent</h2>
+    <div id="recentList"></div>
+    <div id="homeEmpty" class="empty hidden">
+      <p>No transactions yet for this period.</p>
+      <p>Tap <strong>+ Add</strong>, then paste a BofA, Capital One, or Venmo notification — or import a CSV from your bank. Nothing connects to your accounts.</p>
+    </div>
+  </section>
+
+  <!-- TRANSACTIONS -->
+  <section id="view-txns" class="view hidden">
+    <input id="searchBox" type="search" placeholder="Search merchant, note…">
+    <div class="row gap">
+      <select id="filterSource"><option value="">All sources</option><option>BofA</option><option>Capital One</option><option>Venmo</option><option>Manual</option><option>Other</option></select>
+      <select id="filterCat"><option value="">All categories</option></select>
+    </div>
+    <div id="txnList"></div>
+  </section>
+
+  <!-- ADD -->
+  <section id="view-add" class="view hidden">
+    <h2>⚡ Smart import — paste a notification</h2>
+    <p class="hint">Copy a notification from BofA, Capital One, or Venmo and paste it here. One per line for a bunch at once. Parsed right here on your phone — nothing is sent anywhere.</p>
+    <textarea id="pasteBox" rows="5" placeholder="e.g.&#10;Bank of America alert: $42.17 at Chipotle on 11/15/2026&#10;Alex Johnson paid you $25.00 for dinner on Venmo"></textarea>
+    <button id="pasteImportBtn" class="primary">Import pasted notifications</button>
+    <p id="importResult" class="result"></p>
+    <h2>📄 Import a CSV statement</h2>
+    <p class="hint">Download a CSV from BofA, Capital One, or Venmo (Venmo: Settings → Download CSV) and pick it here. BofA, Capital One, and Venmo formats are recognized automatically. Duplicates are skipped.</p>
+    <input id="csvFile" type="file" accept=".csv,text/csv">
+    <p id="csvResult" class="result"></p>
+    <h2>✍️ Add by hand</h2>
+    <form id="manualForm">
+      <label>Merchant / who <input id="mMerchant" required maxlength="60" placeholder="Chipotle, Sam Lee…"></label>
+      <div class="row gap">
+        <label>Amount $ <input id="mAmount" required type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+        <label>Date <input id="mDate" required type="date"></label>
+      </div>
+      <div class="row gap">
+        <label>Type <select id="mDir"><option value="out">Money out</option><option value="in">Money in</option></select></label>
+        <label>Source <select id="mSource"><option>Manual</option><option>BofA</option><option>Capital One</option><option>Venmo</option><option>Other</option></select></label>
+      </div>
+      <label>Category <select id="mCat"></select></label>
+      <label>Note <input id="mNote" maxlength="80" placeholder="Optional"></label>
+      <button class="primary" type="submit">Add transaction</button>
+    </form>
+  </section>
+
+  <!-- BUDGETS -->
+  <section id="view-budgets" class="view hidden">
+    <h2>Monthly budgets</h2>
+    <p class="hint">Set a monthly limit per category. The bars below are recomputed fresh from your transactions every time you open this tab. Venmo and card payments marked “Transfer” never count against a budget.</p>
+    <div id="budgetList"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="view-settings" class="view hidden">
+    <h2>🔒 Security</h2>
+    <div class="secBox">
+      <p><strong>How this app stays safe:</strong></p>
+      <ul>
+        <li>No bank login, ever. It is <strong>not connected</strong> to BofA, Capital One, Venmo, or any account.</li>
+        <li>No accounts, no cloud, no analytics. The app makes <strong>zero network requests</strong> with your data.</li>
+        <li>Everything is stored only in this browser on this device. The code on GitHub contains none of your financial data.</li>
+        <li>Uninstalling / clearing site data erases everything — export a backup first if you want to keep it.</li>
+      </ul>
+    </div>
+    <h3>PIN lock</h3>
+    <p class="hint" id="pinStatus">No PIN set. A PIN locks the app screen on this device (it does not encrypt the stored data — your phone’s own lock does that).</p>
+    <div class="row gap">
+      <input id="newPin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="New PIN (4+ digits)" maxlength="12">
+      <button id="setPinBtn" class="primary small">Set PIN</button>
+      <button id="removePinBtn" class="ghost hidden">Remove PIN</button>
+    </div>
+    <h3>Backup</h3>
+    <div class="row gap wrap">
+      <button id="exportJsonBtn" class="ghost">Export backup (JSON)</button>
+      <button id="exportCsvBtn" class="ghost">Export transactions (CSV)</button>
+      <label class="ghost fileLabel">Restore backup <input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
+    </div>
+    <h3>Danger zone</h3>
+    <button id="clearBtn" class="danger">Erase all data on this device</button>
+    <p id="settingsResult" class="result"></p>
+  </section>
+</main>
+
+<nav id="tabBar" class="hidden">
+  <button data-view="home" class="tab active">Home</button>
+  <button data-view="txns" class="tab">Transactions</button>
+  <button data-view="add" class="tab addTab">+ Add</button>
+  <button data-view="budgets" class="tab">Budgets</button>
+  <button data-view="settings" class="tab">Settings</button>
+</nav>
+
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
