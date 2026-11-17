@@ -93,7 +93,7 @@ function txnRow(t, compact) {
   return '<div class="txn ' + cls + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
     '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
     '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
-    (compact ? '' : '<select class="catSel" data-id="' + t.id + '">' + P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><button class="delBtn" data-id="' + t.id + '" aria-label="Delete"><svg xmlns="http://www.w3.org/2000/svg" class="ic delIc" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg></button>') +
+    (compact ? '' : '<select class="catSel" data-id="' + t.id + '">' + P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><button class="delBtn" data-id="' + t.id + '" aria-label="Delete"><svg width="14" height="14" xmlns="http://www.w3.org/2000/svg" class="ic delIc" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg></button>') +
     '</div>';
 }
 function bindTxnControls(root) {
@@ -110,10 +110,18 @@ function bindTxnControls(root) {
     });
   });
 }
+function weekLabel(startISO, endISO) {
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var s = new Date(startISO + 'T12:00:00'), e = new Date(endISO + 'T12:00:00');
+  var lbl = MON[s.getMonth()] + ' ' + s.getDate();
+  if (s.getFullYear() !== e.getFullYear()) lbl += ', ' + s.getFullYear();
+  lbl += ' – ' + (e.getMonth() !== s.getMonth() ? MON[e.getMonth()] + ' ' : '') + e.getDate() + ', ' + e.getFullYear();
+  return lbl;
+}
 function renderHome() {
   var range = P.periodRange(period, anchor);
   var t = P.totals(state.txns, range);
-  var label = period === 'week' ? range.start + ' → ' + range.end : new Date(anchor + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  var label = period === 'week' ? weekLabel(range.start, range.end) : new Date(anchor + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   $('periodLabel').textContent = label;
   $('statSpent').textContent = fmt(t.spent);
   $('statIncome').textContent = fmt(t.income);
@@ -126,7 +134,7 @@ function renderHome() {
     if (totalBudget > 0) {
       var dayOfMonth = +P.todayISO().slice(8, 10);
       var expected = Math.round(totalBudget * dayOfMonth / range.days);
-      pace = 'Budget pace: ' + fmt(t.spent) + ' spent of ' + fmt(totalBudget) + ' budgeted · straight-line pace for today is ' + fmt(expected) + (t.spent <= expected ? ' — you’re on pace ✅' : ' — ahead of pace ⚠️');
+      pace = 'Budget pace: ' + fmt(t.spent) + ' spent of ' + fmt(totalBudget) + ' budgeted · straight-line pace for today is ' + fmt(expected) + (t.spent <= expected ? ' — you’re on pace' : ' — ahead of pace');
     }
   } else if (period === 'week') {
     pace = 'Transfers (Venmo, card payments) are listed but never counted as spending.';
@@ -163,7 +171,7 @@ function renderBudgets() {
     var spent = t.byCat[c] || 0, limit = state.budgets[c] || 0;
     var pct = limit ? Math.min(100, Math.round(spent / limit * 100)) : 0;
     var over = limit && spent > limit;
-    return '<div class="budgetRow"><div class="budgetHead"><strong>' + esc(c) + '</strong><span>' + fmt(spent) + (limit ? ' of ' + fmt(limit) : ' · no limit set') + (over ? ' · OVER ⚠️' : '') + '</span></div>' +
+    return '<div class="budgetRow"><div class="budgetHead"><strong>' + esc(c) + '</strong><span>' + fmt(spent) + (limit ? ' of ' + fmt(limit) : ' · no limit set') + (over ? ' · OVER' : '') + '</span></div>' +
       (limit ? '<div class="track"><div class="fill' + (over ? ' over' : '') + '" style="width:' + pct + '%"></div></div>' : '') +
       '<div class="row gap"><input type="number" min="0" step="1" inputmode="decimal" placeholder="Monthly $" data-budget="' + esc(c) + '" value="' + (limit ? (limit / 100) : '') + '"><button class="ghost small" data-savebudget="' + esc(c) + '">Save</button></div></div>';
   }).join('');

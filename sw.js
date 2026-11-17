@@ -1,4 +1,4 @@
-var CACHE = 'my-budget-v4';
+var CACHE = 'my-budget-v5';
 var FILES = ['./', 'index.html', 'styles.css', 'app.js', 'parser.js', 'manifest.json', 'icon-192.png', 'icon-512.png', 'fonts/inter-400.woff2', 'fonts/inter-600.woff2', 'fonts/inter-700.woff2', 'fonts/inter-800.woff2'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); })); });
 self.addEventListener('activate', function (e) { e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return k !== CACHE ? caches.delete(k) : null; })); }).then(function () { return self.clients.claim(); })); });
