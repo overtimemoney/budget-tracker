@@ -3,7 +3,7 @@
 (function (root) {
 'use strict';
 
-var CATEGORIES = ['Dining','Groceries','Transport','Shopping','Bills & Utilities','Entertainment','Health','Travel','Income','Transfer','Other'];
+var CATEGORIES = ['Dining','Groceries','Transport','Shopping','Bills & Utilities', 'Housing','Entertainment','Health','Travel','Income','Transfer','Other'];
 
 var RULES = [
   [/chipotle|mcdonald|starbucks|dunkin|wendy|burger|pizza|taco|doordash|uber ?eats|grubhub|restaurant|cafe|coffee|panera|chick-fil-a|subway|kfc|five guys|shake shack/i,'Dining'],

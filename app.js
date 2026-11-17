@@ -183,7 +183,7 @@ function fileDueRecurring() {
     if (!r.active) return;
     var due = recNext(r), guard = 0;
     while (due <= today && guard < 120) {
-      drafts.push({ date: due, cents: r.cents, direction: 'out', merchant: r.name, source: 'Recurring', category: r.category, note: 'Recurring · ' + (FREQ_LABEL[r.freq] || r.freq) });
+      drafts.push({ date: due, cents: r.cents, direction: 'out', merchant: r.name, source: 'Recurring', category: r.category, note: FREQ_LABEL[r.freq] || r.freq });
       r.lastFiled = due; due = recAdvance(due, r.freq); changed = true; guard++;
     }
   });
@@ -238,7 +238,7 @@ $('recAdd').addEventListener('click', function () {
   if (!date) { $('recResult').textContent = 'Pick the next due date.'; return; }
   state.recurring.push({ id: uid(), name: name, cents: cents, category: $('recCat').value, freq: $('recFreq').value, start: date, lastFiled: null, active: true });
   save();
-  $('recName').value = ''; $('recAmount').value = '';
+  $('recName').value = ''; $('recAmount').value = ''; $('recDate').value = P.todayISO();
   $('recResult').textContent = 'Added — ' + name + ' will file itself on ' + prettyDate(date) + '.';
   renderAll();
 });
