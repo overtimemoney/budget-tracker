@@ -290,6 +290,28 @@ function handleHashImport() {
     (res.skipped.length ? ', couldn’t parse ' + res.skipped.length + ' line' + (res.skipped.length === 1 ? '' : 's') : '') + '.';
 }
 
+/* ---------- Theme: light/dark, saved on-device, defaults to the phone's setting ---------- */
+var THEME_KEY = 'mb_theme';
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  var m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute('content', t === 'dark' ? '#000000' : '#ffffff');
+}
+function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
+(function initTheme() {
+  var saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+  if (saved !== 'dark' && saved !== 'light') {
+    saved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+  applyTheme(saved);
+})();
+$('themeBtn').addEventListener('click', function () {
+  var next = currentTheme() === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+});
+
 /* ---------- Force reload: drop cached app files + service worker, keep localStorage data ---------- */
 function reloadApp(btn) {
   var old = btn ? btn.textContent : '';
