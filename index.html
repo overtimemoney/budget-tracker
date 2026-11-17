@@ -82,6 +82,20 @@
     <p class="hint">Download a CSV from BofA, Capital One, or Venmo (Venmo: Settings → Download CSV) and pick it here. BofA, Capital One, and Venmo formats are recognized automatically. Duplicates are skipped.</p>
     <input id="csvFile" type="file" accept=".csv,text/csv">
     <p id="csvResult" class="result"></p>
+    <div id="autoImportBanner" class="empty hidden"></div>
+    <h2>🤖 Automate it (iPhone Shortcuts)</h2>
+    <p class="hint">Apple does not let any app — web or native — read another app’s notifications on iPhone, so no tracker can silently watch BofA/Capital One for you. The closest real automation on iOS uses <strong>text-message alerts + a Shortcut</strong>:</p>
+    <div class="secBox">
+      <p><strong>One-time setup (~3 min):</strong></p>
+      <ul>
+        <li>In the BofA and Capital One apps, turn on <strong>text alerts for purchases</strong> (any amount).</li>
+        <li>Open Apple’s <strong>Shortcuts</strong> app → <strong>Automation</strong> → <strong>+</strong> → <strong>Message</strong> → set “Message Contains” to <strong>$</strong> → choose <strong>Run Immediately</strong>.</li>
+        <li>Add these actions in order: <strong>URL Encode</strong> (the incoming message) → <strong>Text</strong>: <span class="mono">https://overtimemoney.github.io/budget-tracker/#import=</span> followed by the Encoded Text → <strong>Open URLs</strong>.</li>
+        <li>Done: each bank text opens this tracker and files the transaction itself (duplicates are skipped). Prefer less interruption? Swap “Open URLs” for <strong>Append to Note</strong> into a note called “Budget Inbox”, then paste that note here in one go whenever you like.</li>
+        <li>Apple Pay purchases: same recipe, but start the automation from the <strong>Transaction</strong> trigger instead of Message.</li>
+      </ul>
+      <p>Venmo doesn’t offer purchase texts — for Venmo, the email-alert route (ask Luna) or a quick paste here covers it.</p>
+    </div>
     <h2>✍️ Add by hand</h2>
     <form id="manualForm">
       <label>Merchant / who <input id="mMerchant" required maxlength="60" placeholder="Chipotle, Sam Lee…"></label>

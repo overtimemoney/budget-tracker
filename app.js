@@ -30,6 +30,7 @@ function showApp() {
   $('lockScreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('tabBar').classList.remove('hidden');
   $('lockBtn').classList.toggle('hidden', !state.pin);
   renderAll();
+  if (location.hash.indexOf('#import=') === 0 || location.hash.indexOf('#add=') === 0) handleHashImport();
 }
 $('unlockBtn').addEventListener('click', tryUnlock);
 $('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
@@ -256,6 +257,31 @@ $('clearBtn').addEventListener('click', function () {
   $('settingsResult').textContent = 'All data erased from this device.';
 });
 
+/* ---------- Auto-import from link (#import=<url-encoded notification text>) ----------
+   Used by the iOS Shortcuts automation: a bank text opens the tracker with the
+   alert text in the hash, the tracker files it, then wipes the hash so the
+   amount/merchant never lingers in the address bar or history. */
+function handleHashImport() {
+  var m = (location.hash || '').match(/^#(?:import|add)=(.+)$/);
+  if (!m) return;
+  var text = '';
+  try { text = decodeURIComponent(m[1].replace(/\+/g, '%20')); } catch (e) { text = ''; }
+  history.replaceState(null, '', location.pathname + location.search);
+  if (!text) return;
+  var res = P.parseBulk(text, P.todayISO());
+  var banner = $('autoImportBanner');
+  document.querySelector('[data-view="add"]').click();
+  banner.classList.remove('hidden');
+  if (!res.txns.length) {
+    banner.textContent = '🤖 An automation sent a message I couldn’t read as a transaction: “' + text.slice(0, 90) + '” — nothing was added. You can fix it up by hand below.';
+    return;
+  }
+  var added = addTxns(res.txns);
+  banner.textContent = '🤖 Auto-import: filed ' + added.added.length + ' new transaction' + (added.added.length === 1 ? '' : 's') +
+    (added.dupes ? ', skipped ' + added.dupes + ' duplicate' + (added.dupes === 1 ? '' : 's') : '') +
+    (res.skipped.length ? ', couldn’t parse ' + res.skipped.length + ' line' + (res.skipped.length === 1 ? '' : 's') : '') + '.';
+}
+
 /* ---------- Init ---------- */
 P.CATEGORIES.forEach(function (c) {
   $('mCat').insertAdjacentHTML('beforeend', '<option>' + c + '</option>');
@@ -264,4 +290,6 @@ P.CATEGORIES.forEach(function (c) {
 $('mDate').value = P.todayISO();
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () {}); }
 if (state.pin) showLock(); else { unlocked = true; showApp(); }
+if (unlocked) handleHashImport();
+window.addEventListener('hashchange', function () { if (unlocked) handleHashImport(); });
 })();
