@@ -214,7 +214,53 @@ function totals(txns, range) {
   return { spent: spent, income: income, net: income - spent, byCat: byCat, byDay: byDay };
 }
 
-var api = { CATEGORIES: CATEGORIES, categorize: categorize, moneyToCents: moneyToCents, todayISO: todayISO, extractDate: extractDate, parseNotification: parseNotification, parseBulk: parseBulk, parseCSV: parseCSV, parseCSVText: parseCSVText, hashTxn: hashTxn, dedup: dedup, periodRange: periodRange, totals: totals };
+/* ---- Gmail alert emails (used by the direct Gmail sync) ----
+   Mirrors the subject rules of the Luna-side scanner: only completed payments
+   count; requests, cancellations, comments, statements and marketing are out. */
+var GMAIL_SENDERS = ['venmo@venmo.com', 'capitalone@notification.capitalone.com', 'onlinebanking@ealerts.bankofamerica.com'];
+function gmailSearchQuery(sinceISO) {
+  var d = new Date(sinceISO + 'T12:00:00');
+  var p = function (x) { return String(x).padStart(2, '0'); };
+  return 'from:(' + GMAIL_SENDERS.join(' OR ') + ') after:' + d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate());
+}
+function parseGmailAlert(from, subject, dateISO) {
+  var subj = String(subject || '').trim();
+  var sender = String(from || '').toLowerCase();
+  var date = dateISO || todayISO();
+  if (!subj) return null;
+  var low = subj.toLowerCase();
+  var skip = ['request', 'cancel', 'comment', 'history', 'statement', 'security', 'rewards', 'autopay', 'password', 'verification', 'sign-in', 'sign in'];
+  for (var i = 0; i < skip.length; i++) if (low.indexOf(skip[i]) >= 0) return null;
+  var m;
+  if (sender.indexOf('venmo') >= 0) {
+    if ((m = subj.match(/^You paid (.+?) \$([\d,]+\.\d{2})/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'out', cleanMerchant(m[1]), 'Venmo', '');
+    if ((m = subj.match(/^(.+?) paid (?:you )?\$([\d,]+\.\d{2})(?:\s+for\s+(.+))?$/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'in', cleanMerchant(m[1]), 'Venmo', m[3] ? cleanMerchant(m[3]) : '');
+    return null;
+  }
+  var src = sender.indexOf('capitalone') >= 0 ? 'Capital One' : (sender.indexOf('bankofamerica') >= 0 ? 'BofA' : null);
+  if (src) {
+    if ((m = subj.match(/\$([\d,]+\.\d{2})\s+(?:charge|spent|purchase)[^$]*?(?:at|from)\s+(.+)$/i))) {
+      var draft = mk(date, Math.round(parseFloat(m[1].replace(/,/g, '')) * 100), 'out', cleanMerchant(m[2]), src, '');
+      draft.category = categorize(draft.merchant, src, 'out');
+      return draft;
+    }
+    // Fall back to the generic notification parser for other bank subject shapes.
+    var g = parseNotification(subj + ' ' + src, date);
+    if (g) { g.source = src; if (g.category === 'Transfer' && !/payment/i.test(subj)) g.category = categorize(g.merchant, src, g.direction); return g; }
+  }
+  return null;
+}
+function decodeBase64Url(data) {
+  var b64 = String(data || '').replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  if (typeof Buffer !== 'undefined') return Buffer.from(b64, 'base64').toString('utf8');
+  var bin = atob(b64);
+  var bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+var api = { CATEGORIES: CATEGORIES, categorize: categorize, moneyToCents: moneyToCents, todayISO: todayISO, extractDate: extractDate, parseNotification: parseNotification, parseBulk: parseBulk, parseCSV: parseCSV, parseCSVText: parseCSVText, hashTxn: hashTxn, dedup: dedup, periodRange: periodRange, totals: totals, GMAIL_SENDERS: GMAIL_SENDERS, gmailSearchQuery: gmailSearchQuery, parseGmailAlert: parseGmailAlert, decodeBase64Url: decodeBase64Url };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.PBT = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -32,6 +32,7 @@ function showApp() {
   $('lockBtn').classList.toggle('hidden', !state.pin);
   renderAll();
   if (location.hash.indexOf('#import=') === 0 || location.hash.indexOf('#add=') === 0) handleHashImport();
+  maybeAutoSyncGmail();
 }
 $('unlockBtn').addEventListener('click', tryUnlock);
 $('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
@@ -311,6 +312,173 @@ $('searchBox').addEventListener('input', renderTxns);
 $('filterSource').addEventListener('change', renderTxns);
 $('filterCat').addEventListener('change', renderTxns);
 
+/* ---------- Direct Gmail sync ----------
+   The app talks to Google directly from this phone: Google Identity Services
+   issues a short-lived, read-only access token (kept in memory only, never
+   stored), the app lists alert emails from the three senders, parses them
+   on-device, and files them locally. No server, no relay, no Luna. */
+var GMAIL_LS = { client: 'pbt_gmail_client_id', connected: 'pbt_gmail_connected', seen: 'pbt_gmail_seen', last: 'pbt_gmail_last_sync', lookback: 'pbt_gmail_lookback' };
+var gmailToken = null, gmailTokenExp = 0, gmailSyncing = false, gmailAutoTried = false;
+function gmailGet(key, fallback) { try { var v = localStorage.getItem(key); return v == null ? fallback : v; } catch (e) { return fallback; } }
+function gmailSet(key, val) { try { if (val == null) localStorage.removeItem(key); else localStorage.setItem(key, val); } catch (e) {} }
+function gmailSeen() { try { return JSON.parse(gmailGet(GMAIL_LS.seen, '[]')) || []; } catch (e) { return []; } }
+function gmailClientId() { return String(($('gmailClientId').value || gmailGet(GMAIL_LS.client, '')).trim()); }
+function renderGmailStatus() {
+  var cid = gmailGet(GMAIL_LS.client, '');
+  var connected = gmailGet(GMAIL_LS.connected, '') === '1';
+  var last = gmailGet(GMAIL_LS.last, '');
+  if (cid && !$('gmailClientId').value) $('gmailClientId').value = cid;
+  var lb = gmailGet(GMAIL_LS.lookback, '');
+  if (lb) $('gmailLookback').value = lb;
+  $('gmailStatus').innerHTML = !cid ? '<strong>Not set up yet</strong> — paste your Google Client ID below.'
+    : connected ? '<strong>Connected.</strong>' + (last ? ' Last synced ' + new Date(last).toLocaleString() + '.' : ' Not synced yet — tap Sync now.')
+    : '<strong>Client ID saved.</strong> Tap Connect Gmail to link your account.';
+  $('gmailDisconnectBtn').classList.toggle('hidden', !connected);
+  $('gmailConnectBtn').textContent = connected ? 'Reconnect Gmail' : 'Connect Gmail';
+}
+function loadGis() {
+  return new Promise(function (resolve, reject) {
+    if (window.google && google.accounts && google.accounts.oauth2) return resolve();
+    var done = false;
+    var s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = function () { if (!done) { done = true; resolve(); } };
+    s.onerror = function () { if (!done) { done = true; reject(new Error('Could not load Google sign-in — check your connection and try again.')); } };
+    document.head.appendChild(s);
+    setTimeout(function () { if (!done) { done = true; reject(new Error('Google sign-in took too long to load — try again.')); } }, 20000);
+  });
+}
+function gmailRequestToken(interactive) {
+  return loadGis().then(function () {
+    return new Promise(function (resolve, reject) {
+      var cid = gmailClientId();
+      if (!cid) return reject(new Error('Paste your Google Client ID first — the one-time setup steps are in this section.'));
+      if (!/\.apps\.googleusercontent\.com$/.test(cid)) return reject(new Error('That Client ID doesn’t look right — it should end in .apps.googleusercontent.com'));
+      var settled = false;
+      var timer = setTimeout(function () { if (!settled) { settled = true; reject(new Error('Google sign-in timed out — tap Sync now to try again.')); } }, 90000);
+      var client = google.accounts.oauth2.initTokenClient({
+        client_id: cid,
+        scope: 'https://www.googleapis.com/auth/gmail.readonly',
+        callback: function (resp) {
+          if (settled) return; settled = true; clearTimeout(timer);
+          if (resp && resp.access_token) { gmailToken = resp.access_token; gmailTokenExp = Date.now() + (resp.expires_in ? resp.expires_in * 1000 : 3600000); gmailSet(GMAIL_LS.connected, '1'); resolve(gmailToken); }
+          else reject(new Error('Google did not grant access.'));
+        },
+        error_callback: function () { if (!settled) { settled = true; clearTimeout(timer); reject(new Error('Google sign-in was closed or blocked — tap Sync now and finish the Google prompt.')); } }
+      });
+      try { client.requestAccessToken({ prompt: interactive ? '' : 'none' }); }
+      catch (e) { if (!settled) { settled = true; clearTimeout(timer); reject(e); } }
+    });
+  });
+}
+function gmailEnsureToken(interactive) {
+  if (gmailToken && Date.now() < gmailTokenExp - 60000) return Promise.resolve(gmailToken);
+  return gmailRequestToken(interactive);
+}
+function gmailApi(path, token) {
+  return fetch('https://gmail.googleapis.com/gmail/v1/users/me/' + path, { headers: { 'Authorization': 'Bearer ' + token } }).then(function (r) {
+    if (r.status === 401) { gmailToken = null; var e = new Error('Google session expired — tap Sync now to reconnect.'); e.code = 401; throw e; }
+    if (!r.ok) throw new Error('Gmail request failed (' + r.status + ').');
+    return r.json();
+  });
+}
+function gmailHeader(msg, name) {
+  var hs = (msg.payload && msg.payload.headers) || [];
+  for (var i = 0; i < hs.length; i++) if (String(hs[i].name).toLowerCase() === name) return hs[i].value || '';
+  return '';
+}
+function gmailBodyText(part) {
+  if (!part) return '';
+  var out = '';
+  if (part.body && part.body.data) {
+    var text = P.decodeBase64Url(part.body.data);
+    if (part.mimeType === 'text/plain') out += text + '\n';
+    else if (part.mimeType === 'text/html') out += text.replace(/<[^>]+>/g, ' ') + '\n';
+  }
+  (part.parts || []).forEach(function (p) { out += gmailBodyText(p); });
+  return out;
+}
+function syncGmail(interactive) {
+  if (gmailSyncing) return Promise.resolve();
+  if (!gmailClientId()) { renderGmailStatus(); $('gmailResult').textContent = 'Paste your Google Client ID first — the one-time setup steps are right above it.'; return Promise.resolve(); }
+  gmailSyncing = true; $('gmailResult').textContent = 'Syncing with Gmail…';
+  return gmailEnsureToken(interactive).then(function (token) {
+    var last = gmailGet(GMAIL_LS.last, ''), since, d;
+    if (last) { d = new Date(last); d.setDate(d.getDate() - 3); since = P.todayISO(d); }
+    else { d = new Date(); d.setDate(d.getDate() - parseInt($('gmailLookback').value || '90', 10)); since = P.todayISO(d); }
+    var q = P.gmailSearchQuery(since), ids = [];
+    function page(pageToken) {
+      return gmailApi('messages?maxResults=100&q=' + encodeURIComponent(q) + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''), token).then(function (res) {
+        (res.messages || []).forEach(function (mm) { ids.push(mm.id); });
+        if (res.nextPageToken && ids.length < 500) return page(res.nextPageToken);
+      });
+    }
+    return page(null).then(function () {
+      var seen = {}; gmailSeen().forEach(function (id) { seen[id] = 1; });
+      var fresh = ids.filter(function (id) { return !seen[id]; });
+      var drafts = [], ignored = 0, fatal = null;
+      var chain = Promise.resolve();
+      fresh.forEach(function (id) {
+        chain = chain.then(function () {
+          if (fatal) return;
+          return gmailApi('messages/' + encodeURIComponent(id) + '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date', token).then(function (msg) {
+            var dateISO = msg.internalDate ? P.todayISO(new Date(Number(msg.internalDate))) : P.todayISO();
+            var draft = P.parseGmailAlert(gmailHeader(msg, 'from'), gmailHeader(msg, 'subject'), dateISO);
+            if (draft) { drafts.push(draft); seen[id] = 1; return; }
+            return gmailApi('messages/' + encodeURIComponent(id) + '?format=full', token).then(function (full) {
+              var text = gmailHeader(full, 'subject') + '\n' + (full.snippet || '') + '\n' + gmailBodyText(full.payload || {});
+              var g = P.parseNotification(text, dateISO);
+              if (g) {
+                var from = gmailHeader(full, 'from').toLowerCase();
+                g.source = from.indexOf('venmo') >= 0 ? 'Venmo' : (from.indexOf('capitalone') >= 0 ? 'Capital One' : (from.indexOf('bankofamerica') >= 0 ? 'BofA' : g.source));
+                if (g.source === 'Venmo') g.category = 'Transfer';
+                drafts.push(g);
+              } else ignored++;
+              seen[id] = 1;
+            }).catch(function (e) { if (e && e.code === 401) fatal = e; else { ignored++; seen[id] = 1; } });
+          }).catch(function (e) { if (e && e.code === 401) fatal = e; });
+        });
+      });
+      return chain.then(function () {
+        if (fatal) throw fatal;
+        var res = addTxns(drafts);
+        gmailSet(GMAIL_LS.seen, JSON.stringify(Object.keys(seen).slice(-2000)));
+        gmailSet(GMAIL_LS.last, new Date().toISOString());
+        gmailSyncing = false;
+        renderGmailStatus();
+        $('gmailResult').textContent = 'Gmail sync done: added ' + res.added + ' new transaction' + (res.added === 1 ? '' : 's') + (res.dupes ? ', ' + res.dupes + ' already in the app' : '') + ', ignored ' + ignored + ' alert email' + (ignored === 1 ? '' : 's') + ' that weren’t completed payments.';
+      });
+    });
+  }).catch(function (e) {
+    gmailSyncing = false;
+    renderGmailStatus();
+    $('gmailResult').textContent = interactive ? (e.message || 'Gmail sync failed.') : 'Gmail is connected, but Google needs a tap this time — open Settings → Gmail sync → Sync now.';
+  });
+}
+function maybeAutoSyncGmail() {
+  if (gmailAutoTried) return; gmailAutoTried = true;
+  if (gmailGet(GMAIL_LS.connected, '') !== '1' || !gmailGet(GMAIL_LS.client, '')) return;
+  syncGmail(false);
+}
+$('gmailSaveClientBtn').addEventListener('click', function () {
+  var cid = gmailClientId();
+  if (!/\.apps\.googleusercontent\.com$/.test(cid)) { $('gmailResult').textContent = 'That Client ID doesn’t look right — it should end in .apps.googleusercontent.com'; return; }
+  gmailSet(GMAIL_LS.client, cid);
+  renderGmailStatus();
+  $('gmailResult').textContent = 'Client ID saved on this phone. Now tap Connect Gmail.';
+});
+$('gmailConnectBtn').addEventListener('click', function () { syncGmail(true); });
+$('gmailSyncBtn').addEventListener('click', function () { syncGmail(true); });
+$('gmailDisconnectBtn').addEventListener('click', function () {
+  if (gmailToken && window.google && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(gmailToken, function () {});
+  gmailToken = null; gmailTokenExp = 0;
+  gmailSet(GMAIL_LS.connected, null);
+  renderGmailStatus();
+  $('gmailResult').textContent = 'Disconnected. Imported transactions stay in the app. You can also remove this app’s access anytime in your Google Account → Security → Third-party access.';
+});
+$('gmailLookback').addEventListener('change', function () { gmailSet(GMAIL_LS.lookback, $('gmailLookback').value); });
+renderGmailStatus();
+
 /* ---------- Backup / erase ---------- */
 function download(name, text, type) {
   var a = document.createElement('a');
@@ -340,7 +508,11 @@ $('restoreFile').addEventListener('change', function () {
 $('clearBtn').addEventListener('click', function () {
   if (!confirm('Erase ALL budget data stored on this device? This cannot be undone.')) return;
   if (!confirm('Really erase everything? Export a backup first if you might want it back.')) return;
-  state = blank(); save(); renderAll();
+  state = blank(); save();
+  Object.keys(GMAIL_LS).forEach(function (k) { gmailSet(GMAIL_LS[k], null); });
+  gmailToken = null; gmailTokenExp = 0;
+  if ($('gmailClientId')) $('gmailClientId').value = '';
+  renderGmailStatus(); renderAll();
   $('settingsResult').textContent = 'All data erased from this device.';
 });
 
