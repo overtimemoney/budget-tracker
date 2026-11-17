@@ -14,7 +14,20 @@
 <body>
 <div id="lockScreen" class="lock hidden">
   <div class="lockCard">
-    <div class="lockIcon">🔒</div>
+    <div class="lockIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic lockIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+</svg></div>
     <h1>Budget Tracker</h1>
     <p>Enter your PIN to unlock. Your data lives only on this device.</p>
     <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" maxlength="12">
@@ -25,11 +38,39 @@
 
 <header>
   <div>
-    <h1>💰 My Budget</h1>
+    <h1 class="brand"><span class="brandTile"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic brandIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+  <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+</svg></span>My Budget</h1>
     <p class="sub">Private — data never leaves this phone</p>
   </div>
   <div class="headerBtns">
-    <button id="reloadBtn" class="ghost iconBtn" title="Reload app — get the latest version (your data stays)">↻ Reload</button>
+    <button id="reloadBtn" class="ghost iconBtn" title="Reload app — get the latest version (your data stays)"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic btnIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+  <path d="M8 16H3v5" />
+</svg>Reload</button>
     <button id="lockBtn" class="ghost hidden">Lock</button>
   </div>
 </header>
@@ -42,9 +83,33 @@
       <button data-period="month" class="segBtn">Month</button>
     </div>
     <div class="periodNav">
-      <button id="prevPeriod" class="ghost">‹</button>
+      <button id="prevPeriod" class="ghost" aria-label="Previous period"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m15 18-6-6 6-6" />
+</svg></button>
       <div id="periodLabel" class="periodLabel"></div>
-      <button id="nextPeriod" class="ghost">›</button>
+      <button id="nextPeriod" class="ghost" aria-label="Next period"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m9 18 6-6-6-6" />
+</svg></button>
     </div>
     <div class="cards">
       <div class="card big"><span>Spent</span><strong id="statSpent">$0.00</strong></div>
@@ -76,17 +141,62 @@
 
   <!-- ADD -->
   <section id="view-add" class="view hidden">
-    <h2>⚡ Smart import — paste a notification</h2>
+    <h2 class="hIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic hIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z" />
+</svg>Smart import — paste a notification</h2>
     <p class="hint">Copy a notification from BofA, Capital One, or Venmo and paste it here. One per line for a bunch at once. Parsed right here on your phone — nothing is sent anywhere.</p>
     <textarea id="pasteBox" rows="5" placeholder="e.g.&#10;Bank of America alert: $42.17 at Chipotle on 11/15/2026&#10;Alex Johnson paid you $25.00 for dinner on Venmo"></textarea>
     <button id="pasteImportBtn" class="primary">Import pasted notifications</button>
     <p id="importResult" class="result"></p>
-    <h2>📄 Import a CSV statement</h2>
+    <h2 class="hIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic hIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+  <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+  <path d="M10 9H8" />
+  <path d="M16 13H8" />
+  <path d="M16 17H8" />
+</svg>Import a CSV statement</h2>
     <p class="hint">Download a CSV from BofA, Capital One, or Venmo (Venmo: Settings → Download CSV) and pick it here. BofA, Capital One, and Venmo formats are recognized automatically. Duplicates are skipped.</p>
     <input id="csvFile" type="file" accept=".csv,text/csv">
     <p id="csvResult" class="result"></p>
     <div id="autoImportBanner" class="empty hidden"></div>
-    <h2>🤖 Automate it (iPhone Shortcuts)</h2>
+    <h2 class="hIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic hIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 8V4H8" />
+  <rect width="16" height="12" x="4" y="8" rx="2" />
+  <path d="M2 14h2" />
+  <path d="M20 14h2" />
+  <path d="M15 13v2" />
+  <path d="M9 13v2" />
+</svg>Automate it (iPhone Shortcuts)</h2>
     <p class="hint">Apple does not let any app — web or native — read another app’s notifications on iPhone, so no tracker can silently watch BofA/Capital One for you. The closest real automation on iOS uses <strong>text-message alerts + a Shortcut</strong>:</p>
     <div class="secBox">
       <p><strong>One-time setup (~3 min):</strong></p>
@@ -99,7 +209,20 @@
       </ul>
       <p>Venmo doesn’t offer purchase texts — for Venmo, the email-alert route (ask Luna) or a quick paste here covers it.</p>
     </div>
-    <h2>✍️ Add by hand</h2>
+    <h2 class="hIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic hIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M13 21h8" />
+  <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+</svg>Add by hand</h2>
     <form id="manualForm">
       <label>Merchant / who <input id="mMerchant" required maxlength="60" placeholder="Chipotle, Sam Lee…"></label>
       <div class="row gap">
@@ -125,7 +248,20 @@
 
   <!-- SETTINGS -->
   <section id="view-settings" class="view hidden">
-    <h2>🔒 Security</h2>
+    <h2 class="hIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic hIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+  <path d="m9 12 2 2 4-4" />
+</svg>Security</h2>
     <div class="secBox">
       <p><strong>How this app stays safe:</strong></p>
       <ul>
@@ -144,7 +280,22 @@
     </div>
     <h3>App version</h3>
     <p class="hint">Stuck on an old version? Reload fetches the newest app files and clears the cached copy — <strong>your transactions and budgets stay exactly as they are</strong> (they're stored separately from the app files).</p>
-    <button id="reloadBtn2" class="ghost">↻ Reload app (get latest version)</button>
+    <button id="reloadBtn2" class="ghost"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic btnIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+  <path d="M8 16H3v5" />
+</svg>Reload app (get latest version)</button>
     <h3>Backup</h3>
     <div class="row gap wrap">
       <button id="exportJsonBtn" class="ghost">Export backup (JSON)</button>
@@ -158,11 +309,76 @@
 </main>
 
 <nav id="tabBar" class="hidden">
-  <button data-view="home" class="tab active"><span class="tabIcon">⌂</span>Home</button>
-  <button data-view="txns" class="tab"><span class="tabIcon">☰</span>Activity</button>
-  <button data-view="add" class="tab addTab"><span class="tabIcon addIcon">+</span>Add</button>
-  <button data-view="budgets" class="tab"><span class="tabIcon">◎</span>Budgets</button>
-  <button data-view="settings" class="tab"><span class="tabIcon">⚙</span>Settings</button>
+  <button data-view="home" class="tab active"><span class="tabIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+  <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+</svg></span>Home</button>
+  <button data-view="txns" class="tab"><span class="tabIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
+</svg></span>Activity</button>
+  <button data-view="add" class="tab addTab"><span class="tabIcon addIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic addIc"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M5 12h14" />
+  <path d="M12 5v14" />
+</svg></span>Add</button>
+  <button data-view="budgets" class="tab"><span class="tabIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <circle cx="12" cy="12" r="6" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span>Budgets</button>
+  <button data-view="settings" class="tab"><span class="tabIcon"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ic"
+  aria-hidden="true"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+  <circle cx="12" cy="12" r="3" />
+</svg></span>Settings</button>
 </nav>
 
 <script src="parser.js"></script>

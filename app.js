@@ -93,7 +93,7 @@ function txnRow(t, compact) {
   return '<div class="txn ' + cls + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
     '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
     '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
-    (compact ? '' : '<select class="catSel" data-id="' + t.id + '">' + P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><button class="delBtn" data-id="' + t.id + '" aria-label="Delete">✕</button>') +
+    (compact ? '' : '<select class="catSel" data-id="' + t.id + '">' + P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><button class="delBtn" data-id="' + t.id + '" aria-label="Delete"><svg xmlns="http://www.w3.org/2000/svg" class="ic delIc" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg></button>') +
     '</div>';
 }
 function bindTxnControls(root) {
@@ -273,11 +273,11 @@ function handleHashImport() {
   document.querySelector('[data-view="add"]').click();
   banner.classList.remove('hidden');
   if (!res.txns.length) {
-    banner.textContent = '🤖 An automation sent a message I couldn’t read as a transaction: “' + text.slice(0, 90) + '” — nothing was added. You can fix it up by hand below.';
+    banner.textContent = 'An automation sent a message I couldn’t read as a transaction: “' + text.slice(0, 90) + '” — nothing was added. You can fix it up by hand below.';
     return;
   }
   var added = addTxns(res.txns);
-  banner.textContent = '🤖 Auto-import: filed ' + added.added.length + ' new transaction' + (added.added.length === 1 ? '' : 's') +
+  banner.textContent = 'Auto-import: filed ' + added.added.length + ' new transaction' + (added.added.length === 1 ? '' : 's') +
     (added.dupes ? ', skipped ' + added.dupes + ' duplicate' + (added.dupes === 1 ? '' : 's') : '') +
     (res.skipped.length ? ', couldn’t parse ' + res.skipped.length + ' line' + (res.skipped.length === 1 ? '' : 's') : '') + '.';
 }

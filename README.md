@@ -19,3 +19,9 @@ A private, local-only budget tracker: weekly + monthly spending, category budget
 ## Files
 
 `index.html`, `styles.css`, `app.js` (UI + storage), `parser.js` (pure parsing/totals engine, Node-testable), `manifest.json`, `sw.js`, icons.
+
+## Design credits
+
+- Typeface: [Inter](https://github.com/rsms/inter) by Rasmus Andersson (SIL OFL), vendored locally as woff2.
+- Icons: [Lucide](https://github.com/lucide-icons/lucide) (ISC), vendored inline as SVG — no icon fonts, no emoji, no external requests.
+- Layout tokens follow the slate + amber conventions popularized by Tailwind CSS / shadcn-style design systems, hand-implemented in `styles.css` so the app stays dependency-free and offline.
