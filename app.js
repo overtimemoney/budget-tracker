@@ -8,11 +8,12 @@ var period = 'week';
 var anchor = P.todayISO();
 var unlocked = !state.pin;
 
-function blank() { return { txns: [], budgets: {}, pin: null }; }
+function blank() { return { txns: [], budgets: {}, pin: null, recurring: [] }; }
 function load() {
   try { var raw = localStorage.getItem(KEY); if (raw) { var s = JSON.parse(raw); if (s && Array.isArray(s.txns)) return s; } } catch (e) {}
   return blank();
 }
+if (!Array.isArray(state.recurring)) state.recurring = [];
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function fmt(c) { var s = c < 0 ? '-' : ''; return s + '$' + (Math.abs(c) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -164,6 +165,84 @@ function renderTxns() {
   $('txnList').innerHTML = list.length ? list.map(function (t) { return txnRow(t, false); }).join('') : '<p class="hint">No transactions match.</p>';
   bindTxnControls($('txnList'));
 }
+
+/* ---------- Recurring expenses: file themselves on their due date ---------- */
+var FREQ_LABEL = { monthly: 'Monthly', weekly: 'Weekly', biweekly: 'Every 2 weeks', yearly: 'Yearly' };
+function recAdvance(iso, freq) {
+  var d = new Date(iso + 'T12:00:00');
+  if (freq === 'weekly') d.setDate(d.getDate() + 7);
+  else if (freq === 'biweekly') d.setDate(d.getDate() + 14);
+  else if (freq === 'yearly') { var yd = d.getDate(); d.setFullYear(d.getFullYear() + 1); if (d.getDate() < yd) d.setDate(0); }
+  else { var day = d.getDate(); d.setMonth(d.getMonth() + 1); if (d.getDate() < day) d.setDate(0); }
+  return P.todayISO(d);
+}
+function recNext(r) { return r.lastFiled ? recAdvance(r.lastFiled, r.freq) : r.start; }
+function fileDueRecurring() {
+  var today = P.todayISO(), drafts = [], changed = false;
+  state.recurring.forEach(function (r) {
+    if (!r.active) return;
+    var due = recNext(r), guard = 0;
+    while (due <= today && guard < 120) {
+      drafts.push({ date: due, cents: r.cents, direction: 'out', merchant: r.name, source: 'Recurring', category: r.category, note: 'Recurring · ' + (FREQ_LABEL[r.freq] || r.freq) });
+      r.lastFiled = due; due = recAdvance(due, r.freq); changed = true; guard++;
+    }
+  });
+  if (drafts.length) {
+    var res = P.dedup(state.txns, drafts.map(function (d) { return Object.assign({ id: uid() }, d); }));
+    state.txns = state.txns.concat(res.added);
+  }
+  if (changed) save();
+  return drafts.length;
+}
+function recMonthlyCents(r) {
+  if (r.freq === 'weekly') return Math.round(r.cents * 52 / 12);
+  if (r.freq === 'biweekly') return Math.round(r.cents * 26 / 12);
+  if (r.freq === 'yearly') return Math.round(r.cents / 12);
+  return r.cents;
+}
+function prettyDate(iso) { return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+function renderRecurring() {
+  var today = P.todayISO();
+  var active = state.recurring.filter(function (r) { return r.active; });
+  var monthly = active.reduce(function (s, r) { return s + recMonthlyCents(r); }, 0);
+  $('recSummary').innerHTML = state.recurring.length ?
+    '<p class="pace">' + active.length + ' active · about <strong>' + fmt(monthly) + '/mo</strong> in recurring expenses</p>' : '';
+  $('recList').innerHTML = state.recurring.map(function (r) {
+    var next = recNext(r);
+    var when = !r.active ? 'Paused' : (next <= today ? 'Due now · files on open' : 'Next · ' + prettyDate(next));
+    return '<div class="recRow' + (r.active ? '' : ' paused') + '"><div class="recMain"><strong>' + esc(r.name) + '</strong>' +
+      '<span class="meta">' + esc(r.category) + ' · ' + (FREQ_LABEL[r.freq] || r.freq) + ' · ' + when + '</span></div>' +
+      '<div class="recAmt">' + fmt(r.cents) + '</div>' +
+      '<button class="ghost small" data-rec-toggle="' + r.id + '">' + (r.active ? 'Pause' : 'Resume') + '</button>' +
+      '<button class="delBtn" data-rec-del="' + r.id + '" aria-label="Delete ' + esc(r.name) + '"><svg xmlns="http://www.w3.org/2000/svg" class="ic delIc" width="14" height="14" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg></button></div>';
+  }).join('');
+  $('recList').querySelectorAll('[data-rec-toggle]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var r = state.recurring.filter(function (x) { return x.id === b.dataset.recToggle; })[0];
+      if (r) { r.active = !r.active; save(); renderAll(); }
+    });
+  });
+  $('recList').querySelectorAll('[data-rec-del]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.recurring = state.recurring.filter(function (x) { return x.id !== b.dataset.recDel; });
+      save(); renderAll();
+    });
+  });
+}
+$('recAdd').addEventListener('click', function () {
+  var name = $('recName').value.trim();
+  var cents = Math.round(parseFloat($('recAmount').value || '0') * 100);
+  var date = $('recDate').value;
+  if (!name) { $('recResult').textContent = 'Give the expense a name first.'; return; }
+  if (!(cents > 0)) { $('recResult').textContent = 'Enter an amount above $0.'; return; }
+  if (!date) { $('recResult').textContent = 'Pick the next due date.'; return; }
+  state.recurring.push({ id: uid(), name: name, cents: cents, category: $('recCat').value, freq: $('recFreq').value, start: date, lastFiled: null, active: true });
+  save();
+  $('recName').value = ''; $('recAmount').value = '';
+  $('recResult').textContent = 'Added — ' + name + ' will file itself on ' + prettyDate(date) + '.';
+  renderAll();
+});
+
 function renderBudgets() {
   var range = P.periodRange('month', P.todayISO());
   var t = P.totals(state.txns, range);
@@ -184,7 +263,7 @@ function renderBudgets() {
     });
   });
 }
-function renderAll() { if (!unlocked) return; renderHome(); renderTxns(); renderBudgets(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function renderAll() { if (!unlocked) return; fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 
 /* ---------- Adding / importing (dedup + honest counts) ---------- */
 function addTxns(drafts) {
@@ -251,7 +330,7 @@ $('restoreFile').addEventListener('change', function () {
     try {
       var s = JSON.parse(String(reader.result || ''));
       if (!s || !Array.isArray(s.txns)) throw new Error('bad file');
-      state = { txns: s.txns, budgets: s.budgets || {}, pin: state.pin }; save(); renderAll();
+      state = { txns: s.txns, budgets: s.budgets || {}, pin: state.pin, recurring: s.recurring || [] }; save(); renderAll();
       $('settingsResult').textContent = 'Backup restored: ' + state.txns.length + ' transactions.';
     } catch (e) { $('settingsResult').textContent = 'That file isn’t a valid backup — nothing was changed.'; }
     $('restoreFile').value = '';
@@ -340,8 +419,11 @@ $('reloadBtn2').addEventListener('click', function () { reloadApp($('reloadBtn2'
 P.CATEGORIES.forEach(function (c) {
   $('mCat').insertAdjacentHTML('beforeend', '<option>' + c + '</option>');
   $('filterCat').insertAdjacentHTML('beforeend', '<option>' + c + '</option>');
+  if (c !== 'Income' && c !== 'Transfer') $('recCat').insertAdjacentHTML('beforeend', '<option>' + c + '</option>');
 });
+if ($('recCat').querySelector('option[value="Housing"]') || [].some.call($('recCat').options, function (o) { return o.text === 'Housing'; })) $('recCat').value = 'Housing';
 $('mDate').value = P.todayISO();
+$('recDate').value = P.todayISO();
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () {}); }
 if (state.pin) showLock(); else { unlocked = true; showApp(); }
 if (unlocked) handleHashImport();
