@@ -282,6 +282,30 @@ function handleHashImport() {
     (res.skipped.length ? ', couldn’t parse ' + res.skipped.length + ' line' + (res.skipped.length === 1 ? '' : 's') : '') + '.';
 }
 
+/* ---------- Force reload: drop cached app files + service worker, keep localStorage data ---------- */
+function reloadApp(btn) {
+  var old = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = 'Reloading…'; btn.disabled = true; }
+  var jobs = [];
+  if ('serviceWorker' in navigator) {
+    jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+      return Promise.all(regs.map(function (r) { return r.unregister(); }));
+    }).catch(function () {}));
+  }
+  if (window.caches && caches.keys) {
+    jobs.push(caches.keys().then(function (ks) {
+      return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+    }).catch(function () {}));
+  }
+  Promise.all(jobs).then(function () {
+    var url = location.pathname + '?v=' + Date.now() + location.hash;
+    location.replace(url);
+  });
+  setTimeout(function () { if (btn) { btn.textContent = old; btn.disabled = false; } }, 4000);
+}
+$('reloadBtn').addEventListener('click', function () { reloadApp($('reloadBtn')); });
+$('reloadBtn2').addEventListener('click', function () { reloadApp($('reloadBtn2')); });
+
 /* ---------- Init ---------- */
 P.CATEGORIES.forEach(function (c) {
   $('mCat').insertAdjacentHTML('beforeend', '<option>' + c + '</option>');

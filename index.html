@@ -28,7 +28,10 @@
     <h1>💰 My Budget</h1>
     <p class="sub">Private — data never leaves this phone</p>
   </div>
-  <button id="lockBtn" class="ghost hidden">Lock</button>
+  <div class="headerBtns">
+    <button id="reloadBtn" class="ghost iconBtn" title="Reload app — get the latest version (your data stays)">↻ Reload</button>
+    <button id="lockBtn" class="ghost hidden">Lock</button>
+  </div>
 </header>
 
 <main id="app" class="hidden">
@@ -139,6 +142,9 @@
       <button id="setPinBtn" class="primary small">Set PIN</button>
       <button id="removePinBtn" class="ghost hidden">Remove PIN</button>
     </div>
+    <h3>App version</h3>
+    <p class="hint">Stuck on an old version? Reload fetches the newest app files and clears the cached copy — <strong>your transactions and budgets stay exactly as they are</strong> (they're stored separately from the app files).</p>
+    <button id="reloadBtn2" class="ghost">↻ Reload app (get latest version)</button>
     <h3>Backup</h3>
     <div class="row gap wrap">
       <button id="exportJsonBtn" class="ghost">Export backup (JSON)</button>
@@ -152,11 +158,11 @@
 </main>
 
 <nav id="tabBar" class="hidden">
-  <button data-view="home" class="tab active">Home</button>
-  <button data-view="txns" class="tab">Transactions</button>
-  <button data-view="add" class="tab addTab">+ Add</button>
-  <button data-view="budgets" class="tab">Budgets</button>
-  <button data-view="settings" class="tab">Settings</button>
+  <button data-view="home" class="tab active"><span class="tabIcon">⌂</span>Home</button>
+  <button data-view="txns" class="tab"><span class="tabIcon">☰</span>Activity</button>
+  <button data-view="add" class="tab addTab"><span class="tabIcon addIcon">+</span>Add</button>
+  <button data-view="budgets" class="tab"><span class="tabIcon">◎</span>Budgets</button>
+  <button data-view="settings" class="tab"><span class="tabIcon">⚙</span>Settings</button>
 </nav>
 
 <script src="parser.js"></script>
