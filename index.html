@@ -2,14 +2,186 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self'">
 <title>My Budget Tracker</title>
 <meta name="description" content="Private budget tracker. Your data never leaves this device.">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#ffffff">
-<link rel="stylesheet" href="styles.css">
+<style>
+/* My Budget Tracker — Robinhood-style light theme: white, black text, hairlines,
+   one green accent, flat (no gradients, no shadows, no neon).
+   Type: Inter (github.com/rsms/inter). Icons: Lucide (github.com/lucide-icons/lucide), inline SVG. */
+@font-face{font-family:'Inter';src:url('fonts/inter-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Inter';src:url('fonts/inter-600.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Inter';src:url('fonts/inter-700.woff2') format('woff2');font-weight:700;font-display:swap}
+@font-face{font-family:'Inter';src:url('fonts/inter-800.woff2') format('woff2');font-weight:800;font-display:swap}
+:root{
+  --bg:#ffffff; --panel:#ffffff; --wash:#f7f7f7; --wash2:#f1f1f1;
+  --line:#e8e8e8; --line-soft:#efefef;
+  --text:#000000; --body:#1c1c1c; --muted:#6f6f6f; --faint:#9a9a9a;
+  --green:#00a651; --green-bright:#00c805; --red:#e33d2e; --orange:#ff5000;
+  --radius:14px;
+  --surface:#ffffff; --field:#ffffff; --ink:#000000;
+  --primary:#000000; --primary-ink:#ffffff;
+  --tile:#000000; --tile-ink:#ffffff; --bar:#000000;
+  --seg-active:#ffffff; --nav-bg:rgba(255,255,255,.94);
+  --focus-border:#000000; --focus-ring:rgba(0,0,0,.08); --dashed:#d8d8d8;
+}
+[data-theme="dark"]{
+  --bg:#000000; --panel:#000000; --wash:#17191c; --wash2:#23262b;
+  --line:#2e3138; --line-soft:#232529;
+  --text:#ffffff; --body:#e9e9e9; --muted:#9aa0a6; --faint:#6e7278;
+  --green:#00c805; --red:#ff5000;
+  --surface:#000000; --field:#17191c; --ink:#ffffff;
+  --primary:#00c805; --primary-ink:#000000;
+  --tile:#ffffff; --tile-ink:#000000; --bar:#ffffff;
+  --seg-active:#2e3138; --nav-bg:rgba(0,0,0,.92);
+  --focus-border:#ffffff; --focus-ring:rgba(255,255,255,.22); --dashed:#3a3d42;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif;
+  background:var(--bg);color:var(--body);padding:0 20px 108px;max-width:560px;margin:0 auto;
+  font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+::selection{background:rgba(0,200,5,.25)}
+
+/* Header */
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:20px 0 8px}
+header h1{font-size:21px;font-weight:700;letter-spacing:-.02em;margin:0;color:var(--text)}
+.brand{display:flex;align-items:center;gap:10px}
+.brandTile{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;
+  background:var(--tile);color:var(--tile-ink)}
+.brandIc{width:19px;height:19px}
+.sub{color:var(--muted);font-size:12.5px;margin:3px 0 0;display:flex;align-items:center;gap:6px}
+.sub::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--green-bright);flex:none}
+.headerBtns{display:flex;gap:8px;flex:none}
+
+/* Type */
+h2{font-size:17px;font-weight:700;letter-spacing:-.01em;margin:28px 0 10px;color:var(--text)}
+h3{font-size:15px;font-weight:700;margin:24px 0 6px;color:var(--text)}
+.hint{color:var(--muted);font-size:13px;line-height:1.55;margin:6px 0 10px}
+.result{color:var(--green);font-size:13.5px;min-height:18px;line-height:1.5;font-weight:600}
+.error{color:var(--red);font-size:13.5px}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;word-break:break-all;color:var(--text)}
+.hIcon{display:flex;align-items:center;gap:9px}
+.hIc{width:18px;height:18px;color:var(--text)}
+
+/* Controls — Robinhood pills */
+button{font:inherit;font-weight:600;cursor:pointer;border-radius:999px;border:1px solid var(--line);
+  background:var(--field);color:var(--text);padding:9px 16px;transition:transform .06s ease,background .15s ease}
+button:active{transform:scale(.97)}
+button.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-ink);font-weight:700;width:100%;margin-top:12px;padding:14px;border-radius:999px}
+button.primary.small,button.ghost.small{width:auto;margin-top:0;padding:8px 14px}
+button.ghost{background:transparent}
+button.danger{background:transparent;border-color:rgba(227,61,46,.45);color:var(--red)}
+button:disabled{opacity:.55}
+.iconBtn{font-size:13.5px;padding:8px 14px;display:inline-flex;align-items:center}
+.btnIc{width:15px;height:15px;margin-right:6px}
+input,select,textarea{font:inherit;width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+  background:var(--field);color:var(--text);margin:5px 0 12px;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
+input:focus,select:focus,textarea:focus{border-color:var(--focus-border);box-shadow:0 0 0 3px var(--focus-ring)}
+textarea{resize:vertical;line-height:1.5}
+label{font-size:13px;font-weight:600;color:var(--muted)}
+::placeholder{color:var(--faint)}
+
+/* Segmented Week/Month — gray track, white pill */
+.seg{display:flex;background:var(--wash2);border-radius:999px;padding:3px;margin-top:12px}
+.segBtn{flex:1;border:none;background:transparent;color:var(--muted);border-radius:999px;padding:8px;font-weight:600}
+.segBtn.active{background:var(--seg-active);color:var(--text);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.14)}
+.periodNav{display:flex;align-items:center;justify-content:space-between;margin:16px 0 2px}
+.periodNav button{width:38px;height:38px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;border-color:var(--line)}
+.periodNav .ic{width:19px;height:19px}
+.periodLabel{font-weight:600;font-size:15px;color:var(--text)}
+
+/* Stats — flat, borderless, hairline dividers (Robinhood numbers-first) */
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:8px;border-top:1px solid var(--line-soft)}
+.card{background:transparent;border:none;border-radius:0;padding:16px 2px;box-shadow:none}
+.card span{display:block;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.02em}
+.card strong{font-size:22px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--text)}
+.card.big{grid-column:1/-1;padding:18px 2px 6px}
+.card.big span{font-size:13px}
+.card.big strong{font-size:44px;font-weight:800;letter-spacing:-.03em}
+.green{color:var(--green)}.red{color:var(--red)}
+.pace{color:var(--body);font-size:13.5px;line-height:1.55;background:var(--wash);
+  border-radius:12px;padding:11px 14px;margin:14px 0 0}
+.pace:empty{display:none}
+
+/* Daily bars — flat black, today in green */
+.bars{display:flex;gap:4px;align-items:flex-end;height:100px;background:transparent;
+  border:none;border-bottom:1px solid var(--line-soft);border-radius:0;padding:10px 2px 8px;box-shadow:none}
+.barCol{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
+.bar{width:100%;max-width:22px;background:var(--bar);border-radius:3px 3px 0 0;min-height:2px}
+.barCol span{font-size:10px;color:var(--faint);font-weight:600}
+
+/* Category rows */
+.catRow{display:grid;grid-template-columns:118px 1fr 78px;gap:10px;align-items:center;padding:7px 0;font-size:13.5px;border-bottom:1px solid var(--line-soft)}
+.catRow strong{text-align:right;font-variant-numeric:tabular-nums}
+.track{background:var(--wash2);border-radius:99px;height:6px;overflow:hidden}
+.fill{background:var(--bar);height:100%;border-radius:99px}
+.fill.over{background:var(--red)}
+
+/* Transactions — flat list rows with hairlines */
+.txn{display:flex;gap:9px;align-items:center;background:transparent;border:none;border-bottom:1px solid var(--line-soft);
+  border-radius:0;padding:13px 2px;margin:0;box-shadow:none}
+.txnMain{flex:1;min-width:0}
+.txnMain strong{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.meta{color:var(--muted);font-size:12px;display:block;margin-top:1px}
+.txnAmt{font-weight:700;font-variant-numeric:tabular-nums;font-size:15px;color:var(--text)}
+.txn.in .txnAmt{color:var(--green)}
+.txn.transfer{opacity:.6}.txn.transfer .txnAmt{color:var(--body)}
+.catSel{width:auto;max-width:118px;margin:0;padding:6px 7px;font-size:12px;border-radius:999px}
+.delBtn{padding:6px 8px;border:none;color:var(--faint)}
+.delIc{width:14px;height:14px;display:block}
+
+/* Layout helpers */
+.row{display:flex}.row.gap{gap:10px}.row.wrap{flex-wrap:wrap}.row label{flex:1}
+
+/* Budgets + security boxes — light wash panels, flat */
+.budgetRow,.secBox{background:var(--wash);border:none;border-radius:var(--radius);
+  padding:16px;margin:10px 0;box-shadow:none;font-size:14px;line-height:1.55}
+.budgetHead{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:8px}
+.budgetHead span{color:var(--muted);font-variant-numeric:tabular-nums}
+.budgetRow input{margin:10px 0 0;background:var(--field)}
+.secBox ul{margin:8px 0;padding-left:19px}.secBox li{margin:5px 0}
+.secBox p{margin:6px 0}
+
+/* Empty state */
+.empty{background:var(--wash);border:1px dashed var(--dashed);border-radius:var(--radius);
+  padding:16px;color:var(--body);line-height:1.55;font-size:14px;margin:12px 0}
+
+/* Bottom nav — white, hairline top, black active */
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;gap:2px;max-width:560px;margin:0 auto;
+  background:var(--nav-bg);border-top:1px solid var(--line);
+  padding:8px 8px calc(9px + env(safe-area-inset-bottom));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:5}
+.tab{flex:1;border:none;background:transparent;font-size:11px;font-weight:500;color:var(--muted);
+  padding:7px 2px 5px;display:flex;flex-direction:column;align-items:center;gap:3px;border-radius:12px}
+.tabIcon{display:flex}.tabIcon .ic{width:21px;height:21px}
+.tab.active{color:var(--text);font-weight:700}
+.addIcon{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
+  background:var(--tile);color:var(--tile-ink);margin-top:-1px}
+.addIc{width:15px;height:15px;color:var(--tile-ink);stroke-width:3}
+.tab.addTab{color:var(--text)}
+
+/* Lock screen */
+.lock{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:22px;z-index:20}
+.lockCard{max-width:340px;text-align:center;width:100%;background:var(--field);border:1px solid var(--line);
+  border-radius:22px;padding:30px 24px;box-shadow:none}
+.lockCard h1{font-size:21px;margin:10px 0 4px;color:var(--text)}
+.lockCard p{color:var(--muted);font-size:13.5px}
+.lockIcon{display:flex;align-items:center;justify-content:center;width:64px;height:64px;margin:0 auto;
+  border-radius:50%;background:var(--wash);border:1px solid var(--line)}
+.lockIc{width:28px;height:28px;color:var(--text)}
+.fileLabel{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:600;background:var(--field)}
+.hidden{display:none!important}
+.ic{flex:none;vertical-align:middle}
+.themeBtn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;padding:0}
+.themeSun{display:none}
+[data-theme="dark"] .themeSun{display:block}
+[data-theme="dark"] .themeMoon{display:none}
+button .ic{pointer-events:none}
+
+</style>
 </head>
 <body>
 <div id="lockScreen" class="lock hidden">
@@ -414,7 +586,580 @@
 </svg></span>Settings</button>
 </nav>
 
-<script src="parser.js"></script>
-<script src="app.js"></script>
+<script>
+/* Parser + totals engine. Pure functions, no network, no storage.
+   Works in browser (window.PBT) and Node (module.exports) for tests. */
+(function (root) {
+'use strict';
+
+var CATEGORIES = ['Dining','Groceries','Transport','Shopping','Bills & Utilities','Entertainment','Health','Travel','Income','Transfer','Other'];
+
+var RULES = [
+  [/chipotle|mcdonald|starbucks|dunkin|wendy|burger|pizza|taco|doordash|uber ?eats|grubhub|restaurant|cafe|coffee|panera|chick-fil-a|subway|kfc|five guys|shake shack/i,'Dining'],
+  [/market basket|trader joe|whole foods|stop ?& ?shop|shaw|hannaford|aldi|kroger|walmart grocery|instacart|grocery|supermarket|costco/i,'Groceries'],
+  [/shell|exxon|mobil|bp |gas station|uber(?! ?eats)|lyft|mbta|parking|toll|amtrak|delta|united air|american air|jetblue|southwest|airbnb|hotel/i,'Transport'],
+  [/amazon|target|walmart(?! grocery)|best buy|nike|apple store|etsy|ebay|home depot|lowe|tj ?maxx|marshalls/i,'Shopping'],
+  [/electric|water bill|comcast|xfinity|verizon|at&t|t-mobile|internet|utility|rent|mortgage|insurance|geico|progressive/i,'Bills & Utilities'],
+  [/netflix|spotify|hulu|hbo|disney|movie|theater|steam|playstation|xbox|ticketmaster/i,'Entertainment'],
+  [/cvs|walgreens|pharmacy|doctor|dental|hospital|clinic|gym|planet fitness/i,'Health']
+];
+function categorize(merchant, source, direction) {
+  if (direction === 'in') return 'Income';
+  if (source === 'Venmo') return 'Transfer';
+  var m = String(merchant || '');
+  for (var i = 0; i < RULES.length; i++) if (RULES[i][0].test(m)) return RULES[i][1];
+  if (/hotel|airbnb|flight|airlines/i.test(m)) return 'Travel';
+  return 'Other';
+}
+
+function moneyToCents(s) {
+  if (s == null) return null;
+  var neg = /\(|^-|^-\$/.test(String(s).trim());
+  var n = parseFloat(String(s).replace(/[^0-9.]/g, ''));
+  if (isNaN(n)) return null;
+  var c = Math.round(n * 100);
+  return neg ? -c : c;
+}
+function todayISO(d) {
+  d = d || new Date();
+  var p = function (x) { return String(x).padStart(2, '0'); };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+var MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function extractDate(text, fallback) {
+  var m = text.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
+  m = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (m) { var y = +m[3]; if (y < 100) y += 2000; return y + '-' + String(m[1]).padStart(2,'0') + '-' + String(m[2]).padStart(2,'0'); }
+  m = text.match(/(\d{1,2})\/(\d{1,2})\b/);
+  if (m) { var yr = new Date().getFullYear(); return yr + '-' + String(m[1]).padStart(2,'0') + '-' + String(m[2]).padStart(2,'0'); }
+  m = text.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})(?:,\s*(\d{4}))?/i);
+  if (m) return (m[3] ? +m[3] : new Date().getFullYear()) + '-' + String(MONTHS[m[1].slice(0,3).toLowerCase()] + 1).padStart(2,'0') + '-' + String(m[2]).padStart(2,'0');
+  return fallback || todayISO();
+}
+function cleanMerchant(s) {
+  var out = String(s || '').replace(/\s+/g, ' ')
+    .replace(/\s+(was posted|was charged|has posted|posted to your account|on your card.*|ending in \d+.*)$/i, '')
+    .replace(/\s+\d{1,2}\/\d{1,2}(\/\d{2,4})?\s*$/, '')
+    .replace(/[.·]+$/, '').trim();
+  return out.slice(0, 60) || 'Unknown';
+}
+function detectSource(text) {
+  if (/venmo/i.test(text)) return 'Venmo';
+  if (/capital one/i.test(text)) return 'Capital One';
+  if (/bank of america|bofa|bk of america/i.test(text)) return 'BofA';
+  return 'Other';
+}
+
+/* Parse ONE notification / text line into a txn draft, or null. */
+function parseNotification(line, fallbackDate) {
+  var text = String(line || '').trim();
+  if (!text) return null;
+  var amtM = text.match(/\$\s?([\d,]+\.\d{2}|[\d,]+)/);
+  if (!amtM) return null;
+  var cents = Math.abs(moneyToCents(amtM[1]));
+  if (!cents) return null;
+  var source = detectSource(text);
+  var date = extractDate(text, fallbackDate);
+  var merchant = '', direction = 'out', m;
+
+  // Venmo: "X paid you $25.00 for ..." / "You paid X $25.00"
+  if ((m = text.match(/^(.*?)\s+paid you\b/i)) && source === 'Venmo' || /paid you/i.test(text)) {
+    merchant = cleanMerchant((text.match(/^(.*?)\s+paid you\b/i) || [])[1] || 'Venmo');
+    direction = 'in'; source = 'Venmo';
+    var noteM = text.match(/paid you[^$]*\$[\d,.]+\s*(?:for\s+)?(.+)$/i);
+    var note = noteM ? cleanMerchant(noteM[1].replace(/\s+on venmo$/i, '')) : '';
+    return mk(date, cents, direction, merchant, source, note);
+  }
+  if ((m = text.match(/you (?:paid|sent|charged)\s+(.*?)\s+\$/i))) {
+    merchant = cleanMerchant(m[1]); direction = 'out'; if (/venmo/i.test(text)) source = 'Venmo';
+    return mk(date, cents, direction, merchant, source, '');
+  }
+  if (/venmo/i.test(text) && (m = text.match(/\$[\d,.]+\s*(?:to|from)\s+(.+?)(?:\s+for\b|[.·]|$)/i))) {
+    merchant = cleanMerchant(m[1]); direction = /from/i.test(text) ? 'in' : 'out'; source = 'Venmo';
+    return mk(date, cents, direction, merchant, source, '');
+  }
+  // Refund / deposit / payment received
+  if (/(refund|deposit|credited|payment received|direct dep|payroll|salary)/i.test(text)) direction = 'in';
+  // Merchant after at/for
+  if ((m = text.match(/\$[\d,.]+\s+(?:at|for|to)\s+([^.·\n]+?)(?:\s+on\s+|\s+ending|\.|$)/i))) merchant = cleanMerchant(m[1]);
+  else if ((m = text.match(/(?:charge of|purchase of|spent|charged)\s+\$[\d,.]+\s+(?:at\s+)?([^.·\n]+?)(?:\.|$)/i))) merchant = cleanMerchant(m[1]);
+  else if ((m = text.match(/^([^:$]+?)\s*[:\-]\s*\$/))) merchant = cleanMerchant(m[1].replace(/alert|notification|bank of america|capital one/gi, ''));
+  if (!merchant || /^(bank of america|capital one|bofa|alert)$/i.test(merchant)) merchant = source !== 'Other' ? source + ' purchase' : 'Purchase';
+  return mk(date, cents, direction, merchant, source, '');
+}
+function mk(date, cents, direction, merchant, source, note) {
+  var cat = categorize(merchant, source, direction);
+  if (/card payment|payment.*thank you|autopay payment/i.test(merchant)) cat = 'Transfer'; // paying your own card is not income
+  else if (source === 'Venmo') cat = 'Transfer'; // Venmo in/out defaults to Transfer: excluded from spent/income until the user recategorizes it
+  else if (direction === 'in') cat = 'Income';
+  if ((merchant === 'Purchase' || merchant === 'Unknown') && direction === 'in') merchant = 'Deposit';
+  return { date: date, cents: cents, direction: direction, merchant: merchant, source: source, category: cat, note: note || '' };
+}
+
+/* Bulk paste: one notification per line. Reports parsed AND skipped — never silent. */
+function parseBulk(text, fallbackDate) {
+  var lines = String(text || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+  var out = [], skipped = [];
+  lines.forEach(function (l) { var t = parseNotification(l, fallbackDate); if (t) out.push(t); else skipped.push(l); });
+  return { txns: out, skipped: skipped, totalLines: lines.length };
+}
+
+/* ---- CSV ---- */
+function parseCSVText(text) {
+  var rows = [], row = [], cur = '', q = false;
+  text = String(text || '');
+  for (var i = 0; i < text.length; i++) {
+    var ch = text[i];
+    if (q) { if (ch === '"') { if (text[i+1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cur); cur = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i+1] === '\n') i++; row.push(cur); cur = ''; if (row.length > 1 || row[0] !== '') rows.push(row); row = []; }
+    else cur += ch;
+  }
+  row.push(cur); if (row.length > 1 || row[0] !== '') rows.push(row);
+  return rows;
+}
+function parseCSV(text) {
+  var rows = parseCSVText(text).filter(function (r) { return r.join('').trim(); });
+  if (rows.length < 2) return { txns: [], skipped: rows.length, format: 'unknown' };
+  // Find header row within first 6 rows
+  var hi = -1, hdr = null;
+  for (var r = 0; r < Math.min(6, rows.length); r++) {
+    var j = rows[r].join(',').toLowerCase();
+    if (/date/.test(j) && /(description|name|note|from|merchant)/.test(j)) { hi = r; hdr = rows[r].map(function (h) { return h.trim().toLowerCase(); }); break; }
+  }
+  if (hi < 0) return { txns: [], skipped: rows.length, format: 'unknown' };
+  function col() { for (var a = 0; a < arguments.length; a++) { var ix = hdr.indexOf(arguments[a]); if (ix >= 0) return ix; } return -1; }
+  function colLike(re) { for (var i = 0; i < hdr.length; i++) if (re.test(hdr[i])) return i; return -1; }
+  var isVenmo = hdr.indexOf('from') >= 0 && colLike(/amount/) >= 0 && /venmo|note/.test(hdr.join(','));
+  var iDate = col('transaction date', 'posted date', 'date', 'datetime') >= 0 ? (col('transaction date') >= 0 ? col('transaction date') : colLike(/date/)) : colLike(/date/);
+  var iDesc = col('description', 'name', 'note', 'details');
+  var iFrom = col('from'), iTo = col('to');
+  var iAmt = colLike(/^amount/);
+  var iDebit = col('debit'), iCredit = col('credit');
+  var format = isVenmo ? 'Venmo' : (iDebit >= 0 || iCredit >= 0 ? 'Capital One' : (iAmt >= 0 ? 'BofA / generic' : 'generic'));
+  var source = isVenmo ? 'Venmo' : (format === 'Capital One' ? 'Capital One' : 'BofA');
+  var txns = [], skipped = 0;
+  for (var k = hi + 1; k < rows.length; k++) {
+    var cells = rows[k];
+    var date = extractDate(cells[iDate] || '', null);
+    if (!cells[iDate] || date === todayISO() && !/\d/.test(cells[iDate])) { skipped++; continue; }
+    var cents = null, direction = 'out', merchant = '';
+    if (isVenmo) {
+      cents = moneyToCents(cells[iAmt]);
+      if (cents == null) { skipped++; continue; }
+      direction = cents < 0 ? 'out' : 'in'; cents = Math.abs(cents);
+      merchant = cleanMerchant(direction === 'out' ? (cells[iTo] || cells[iDesc]) : (cells[iFrom] || cells[iDesc]));
+    } else if (iDebit >= 0 || iCredit >= 0) {
+      var d = moneyToCents(cells[iDebit]), c = moneyToCents(cells[iCredit]);
+      if (d) { cents = Math.abs(d); direction = 'out'; } else if (c) { cents = Math.abs(c); direction = 'in'; }
+      if (!cents) { skipped++; continue; }
+      merchant = cleanMerchant(cells[iDesc]);
+    } else {
+      cents = moneyToCents(cells[iAmt]);
+      if (cents == null) { skipped++; continue; }
+      direction = cents < 0 ? 'out' : 'in';
+      if (/bank of america/i.test(text.slice(0, 500))) direction = cents < 0 ? 'out' : 'in';
+      cents = Math.abs(cents); merchant = cleanMerchant(cells[iDesc]);
+    }
+    if (!merchant) { skipped++; continue; }
+    txns.push(mk(date, cents, direction, merchant, source, ''));
+  }
+  return { txns: txns, skipped: skipped, format: format };
+}
+
+/* ---- Dedup + totals (totals always recomputed fresh from the txn list) ---- */
+function hashTxn(t) {
+  return [t.date, t.cents, String(t.merchant || '').toLowerCase().replace(/[^a-z0-9]/g, ''), t.source, t.direction].join('|');
+}
+function dedup(existing, incoming) {
+  var seen = {}, added = [], dupes = 0;
+  existing.forEach(function (t) { seen[hashTxn(t)] = 1; });
+  incoming.forEach(function (t) { var h = hashTxn(t); if (seen[h]) dupes++; else { seen[h] = 1; added.push(t); } });
+  return { added: added, dupes: dupes };
+}
+function periodRange(kind, anchorISO) {
+  var a = new Date(anchorISO + 'T12:00:00');
+  var p = function (x) { return String(x).padStart(2, '0'); };
+  var iso = function (d) { return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
+  if (kind === 'month') {
+    var s = new Date(a.getFullYear(), a.getMonth(), 1), e = new Date(a.getFullYear(), a.getMonth() + 1, 0);
+    return { start: iso(s), end: iso(e), days: e.getDate() };
+  }
+  var dow = (a.getDay() + 6) % 7; // Monday start
+  var s2 = new Date(a); s2.setDate(a.getDate() - dow);
+  var e2 = new Date(s2); e2.setDate(s2.getDate() + 6);
+  return { start: iso(s2), end: iso(e2), days: 7 };
+}
+function totals(txns, range) {
+  var spent = 0, income = 0, byCat = {}, byDay = {};
+  txns.forEach(function (t) {
+    if (t.date < range.start || t.date > range.end) return;
+    if (t.direction === 'out' && t.category !== 'Transfer') { spent += t.cents; byCat[t.category] = (byCat[t.category] || 0) + t.cents; byDay[t.date] = (byDay[t.date] || 0) + t.cents; }
+    else if (t.direction === 'in' && t.category !== 'Transfer') income += t.cents;
+    else if (t.category === 'Transfer') { /* transfers tracked in list, excluded from spent/income */ }
+  });
+  return { spent: spent, income: income, net: income - spent, byCat: byCat, byDay: byDay };
+}
+
+var api = { CATEGORIES: CATEGORIES, categorize: categorize, moneyToCents: moneyToCents, todayISO: todayISO, extractDate: extractDate, parseNotification: parseNotification, parseBulk: parseBulk, parseCSV: parseCSV, parseCSVText: parseCSVText, hashTxn: hashTxn, dedup: dedup, periodRange: periodRange, totals: totals };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.PBT = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* My Budget Tracker — local-only. No fetch/XHR/beacon anywhere in this file by design. */
+(function () {
+'use strict';
+var P = window.PBT;
+var KEY = 'pbt-v1';
+var state = load();
+var period = 'week';
+var anchor = P.todayISO();
+var unlocked = !state.pin;
+
+function blank() { return { txns: [], budgets: {}, pin: null }; }
+function load() {
+  try { var raw = localStorage.getItem(KEY); if (raw) { var s = JSON.parse(raw); if (s && Array.isArray(s.txns)) return s; } } catch (e) {}
+  return blank();
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function fmt(c) { var s = c < 0 ? '-' : ''; return s + '$' + (Math.abs(c) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; }); }
+function $(id) { return document.getElementById(id); }
+
+/* ---------- PIN (UI lock; SHA-256 hash + salt, never the PIN itself) ---------- */
+function sha256(str) {
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function (buf) {
+    return Array.prototype.map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  });
+}
+function showLock() { $('lockScreen').classList.remove('hidden'); $('app').classList.add('hidden'); $('tabBar').classList.add('hidden'); }
+function showApp() {
+  $('lockScreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('tabBar').classList.remove('hidden');
+  $('lockBtn').classList.toggle('hidden', !state.pin);
+  renderAll();
+  if (location.hash.indexOf('#import=') === 0 || location.hash.indexOf('#add=') === 0) handleHashImport();
+}
+$('unlockBtn').addEventListener('click', tryUnlock);
+$('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
+function tryUnlock() {
+  var pin = $('pinInput').value;
+  if (!state.pin) { unlocked = true; showApp(); return; }
+  sha256(state.pin.salt + ':' + pin).then(function (h) {
+    if (h === state.pin.hash) { unlocked = true; $('pinError').textContent = ''; showApp(); }
+    else $('pinError').textContent = 'Wrong PIN — try again.';
+  });
+}
+$('lockBtn').addEventListener('click', function () { unlocked = false; $('pinInput').value = ''; showLock(); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && state.pin && unlocked) { unlocked = false; showLock(); }
+});
+$('setPinBtn').addEventListener('click', function () {
+  var pin = $('newPin').value.trim();
+  if (pin.length < 4) { $('settingsResult').textContent = 'PIN needs at least 4 characters.'; return; }
+  var salt = uid() + uid();
+  sha256(salt + ':' + pin).then(function (h) {
+    state.pin = { salt: salt, hash: h }; save(); $('newPin').value = '';
+    $('settingsResult').textContent = 'PIN set. The app will lock when you switch away from it.';
+    $('removePinBtn').classList.remove('hidden'); $('lockBtn').classList.remove('hidden'); updatePinStatus();
+  });
+});
+$('removePinBtn').addEventListener('click', function () {
+  state.pin = null; save(); $('settingsResult').textContent = 'PIN removed.';
+  $('removePinBtn').classList.add('hidden'); $('lockBtn').classList.add('hidden'); updatePinStatus();
+});
+function updatePinStatus() { $('pinStatus').textContent = state.pin ? 'PIN is set — the app locks when you switch away from it.' : 'No PIN set. A PIN locks the app screen on this device (it does not encrypt the stored data — your phone’s own lock does that).'; }
+
+/* ---------- Navigation ---------- */
+document.querySelectorAll('.tab').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('.tab').forEach(function (x) { x.classList.toggle('active', x === b); });
+    document.querySelectorAll('.view').forEach(function (v) { v.classList.add('hidden'); });
+    $('view-' + b.dataset.view).classList.remove('hidden');
+    renderAll();
+  });
+});
+document.querySelectorAll('.segBtn').forEach(function (b) {
+  b.addEventListener('click', function () {
+    period = b.dataset.period;
+    document.querySelectorAll('.segBtn').forEach(function (x) { x.classList.toggle('active', x === b); });
+    renderHome();
+  });
+});
+function shiftAnchor(dir) {
+  var d = new Date(anchor + 'T12:00:00');
+  if (period === 'week') d.setDate(d.getDate() + dir * 7); else d.setMonth(d.getMonth() + dir);
+  anchor = P.todayISO(d); renderHome();
+}
+$('prevPeriod').addEventListener('click', function () { shiftAnchor(-1); });
+$('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
+
+/* ---------- Rendering (all totals recomputed fresh from state.txns on every render) ---------- */
+function txnRow(t, compact) {
+  var sign = t.direction === 'in' ? '+' : '−';
+  var cls = t.category === 'Transfer' ? 'transfer' : (t.direction === 'in' ? 'in' : 'out');
+  return '<div class="txn ' + cls + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
+    '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
+    '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
+    (compact ? '' : '<select class="catSel" data-id="' + t.id + '">' + P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><button class="delBtn" data-id="' + t.id + '" aria-label="Delete"><svg width="14" height="14" xmlns="http://www.w3.org/2000/svg" class="ic delIc" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg></button>') +
+    '</div>';
+}
+function bindTxnControls(root) {
+  root.querySelectorAll('.catSel').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      var t = state.txns.filter(function (x) { return x.id === sel.dataset.id; })[0];
+      if (t) { t.category = sel.value; save(); renderAll(); }
+    });
+  });
+  root.querySelectorAll('.delBtn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      state.txns = state.txns.filter(function (x) { return x.id !== btn.dataset.id; });
+      save(); renderAll();
+    });
+  });
+}
+function weekLabel(startISO, endISO) {
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var s = new Date(startISO + 'T12:00:00'), e = new Date(endISO + 'T12:00:00');
+  var lbl = MON[s.getMonth()] + ' ' + s.getDate();
+  if (s.getFullYear() !== e.getFullYear()) lbl += ', ' + s.getFullYear();
+  lbl += ' – ' + (e.getMonth() !== s.getMonth() ? MON[e.getMonth()] + ' ' : '') + e.getDate() + ', ' + e.getFullYear();
+  return lbl;
+}
+function renderHome() {
+  var range = P.periodRange(period, anchor);
+  var t = P.totals(state.txns, range);
+  var label = period === 'week' ? weekLabel(range.start, range.end) : new Date(anchor + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  $('periodLabel').textContent = label;
+  $('statSpent').textContent = fmt(t.spent);
+  $('statIncome').textContent = fmt(t.income);
+  $('statNet').textContent = fmt(t.net);
+  $('statNet').className = t.net < 0 ? 'red' : 'green';
+  // Pace: for the current month, compare spent vs a straight-line pace to today
+  var pace = '';
+  if (period === 'month' && range.start <= P.todayISO() && P.todayISO() <= range.end) {
+    var totalBudget = Object.keys(state.budgets).reduce(function (s, k) { return s + (state.budgets[k] || 0); }, 0);
+    if (totalBudget > 0) {
+      var dayOfMonth = +P.todayISO().slice(8, 10);
+      var expected = Math.round(totalBudget * dayOfMonth / range.days);
+      pace = 'Budget pace: ' + fmt(t.spent) + ' spent of ' + fmt(totalBudget) + ' budgeted · straight-line pace for today is ' + fmt(expected) + (t.spent <= expected ? ' — you’re on pace' : ' — ahead of pace');
+    }
+  } else if (period === 'week') {
+    pace = 'Transfers (Venmo, card payments) are listed but never counted as spending.';
+  }
+  $('paceLine').textContent = pace;
+  // Daily bars
+  var days = [], cur = new Date(range.start + 'T12:00:00');
+  var end = new Date(range.end + 'T12:00:00'), max = 1;
+  while (cur <= end) { var iso = P.todayISO(cur); var v = t.byDay[iso] || 0; if (v > max) max = v; days.push({ iso: iso, v: v, dow: cur.toLocaleDateString('en-US', { weekday: 'narrow' }), dom: cur.getDate() }); cur.setDate(cur.getDate() + 1); }
+  $('dayBars').innerHTML = days.map(function (d) {
+    return '<div class="barCol"><div class="bar" style="height:' + Math.max(2, Math.round(d.v / max * 64)) + 'px" title="' + d.iso + ' ' + fmt(d.v) + '"></div><span>' + (period === 'week' ? d.dow : d.dom) + '</span></div>';
+  }).join('');
+  var cats = Object.keys(t.byCat).sort(function (a, b) { return t.byCat[b] - t.byCat[a]; });
+  $('catList').innerHTML = cats.length ? cats.map(function (c) {
+    var pct = t.spent ? Math.round(t.byCat[c] / t.spent * 100) : 0;
+    return '<div class="catRow"><span>' + esc(c) + '</span><div class="track"><div class="fill" style="width:' + pct + '%"></div></div><strong>' + fmt(t.byCat[c]) + '</strong></div>';
+  }).join('') : '<p class="hint">Nothing spent in this period yet.</p>';
+  var inRange = state.txns.filter(function (x) { return x.date >= range.start && x.date <= range.end; }).sort(function (a, b) { return b.date.localeCompare(a.date); }).slice(0, 8);
+  $('recentList').innerHTML = inRange.map(function (x) { return txnRow(x, true); }).join('');
+  $('homeEmpty').classList.toggle('hidden', state.txns.length > 0);
+}
+function renderTxns() {
+  var q = ($('searchBox').value || '').toLowerCase(), fs = $('filterSource').value, fc = $('filterCat').value;
+  var list = state.txns.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; }).filter(function (t) {
+    return (!q || (t.merchant + ' ' + (t.note || '')).toLowerCase().indexOf(q) >= 0) && (!fs || t.source === fs) && (!fc || t.category === fc);
+  });
+  $('txnList').innerHTML = list.length ? list.map(function (t) { return txnRow(t, false); }).join('') : '<p class="hint">No transactions match.</p>';
+  bindTxnControls($('txnList'));
+}
+function renderBudgets() {
+  var range = P.periodRange('month', P.todayISO());
+  var t = P.totals(state.txns, range);
+  $('budgetList').innerHTML = P.CATEGORIES.filter(function (c) { return c !== 'Income' && c !== 'Transfer'; }).map(function (c) {
+    var spent = t.byCat[c] || 0, limit = state.budgets[c] || 0;
+    var pct = limit ? Math.min(100, Math.round(spent / limit * 100)) : 0;
+    var over = limit && spent > limit;
+    return '<div class="budgetRow"><div class="budgetHead"><strong>' + esc(c) + '</strong><span>' + fmt(spent) + (limit ? ' of ' + fmt(limit) : ' · no limit set') + (over ? ' · OVER' : '') + '</span></div>' +
+      (limit ? '<div class="track"><div class="fill' + (over ? ' over' : '') + '" style="width:' + pct + '%"></div></div>' : '') +
+      '<div class="row gap"><input type="number" min="0" step="1" inputmode="decimal" placeholder="Monthly $" data-budget="' + esc(c) + '" value="' + (limit ? (limit / 100) : '') + '"><button class="ghost small" data-savebudget="' + esc(c) + '">Save</button></div></div>';
+  }).join('');
+  $('budgetList').querySelectorAll('[data-savebudget]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var input = $('budgetList').querySelector('[data-budget="' + btn.dataset.savebudget + '"]');
+      var v = Math.round(parseFloat(input.value || '0') * 100);
+      if (v > 0) state.budgets[btn.dataset.savebudget] = v; else delete state.budgets[btn.dataset.savebudget];
+      save(); renderBudgets(); renderHome();
+    });
+  });
+}
+function renderAll() { if (!unlocked) return; renderHome(); renderTxns(); renderBudgets(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+
+/* ---------- Adding / importing (dedup + honest counts) ---------- */
+function addTxns(drafts) {
+  var withIds = drafts.map(function (d) { return Object.assign({ id: uid() }, d); });
+  var res = P.dedup(state.txns, withIds);
+  state.txns = state.txns.concat(res.added); save(); renderAll();
+  return res;
+}
+$('pasteImportBtn').addEventListener('click', function () {
+  var res = P.parseBulk($('pasteBox').value, P.todayISO());
+  if (!res.txns.length) { $('importResult').textContent = 'Nothing I could read there — check the format, or add it by hand below.'; return; }
+  var added = addTxns(res.txns);
+  var msg = 'Imported ' + added.added.length + ' new transaction' + (added.added.length === 1 ? '' : 's') + '.';
+  if (added.dupes) msg += ' Skipped ' + added.dupes + ' duplicate' + (added.dupes === 1 ? '' : 's') + ' already in the tracker.';
+  if (res.skipped.length) msg += ' Couldn’t parse ' + res.skipped.length + ' of ' + res.totalLines + ' lines — those were NOT imported: “' + res.skipped[0].slice(0, 60) + '”' + (res.skipped.length > 1 ? '…' : '');
+  $('importResult').textContent = msg;
+  if (added.added.length) $('pasteBox').value = '';
+});
+$('csvFile').addEventListener('change', function () {
+  var f = $('csvFile').files[0]; if (!f) return;
+  var reader = new FileReader();
+  reader.onload = function () {
+    var res = P.parseCSV(String(reader.result || ''));
+    if (!res.txns.length) { $('csvResult').textContent = 'No transactions read from that file (format: ' + res.format + '). If it’s a BofA, Capital One, or Venmo export, make sure it’s the CSV, not a PDF.'; return; }
+    var added = addTxns(res.txns);
+    var msg = 'Read a ' + res.format + ' file: imported ' + added.added.length + ' new, skipped ' + added.dupes + ' duplicates';
+    if (res.skipped) msg += ', and ' + res.skipped + ' rows couldn’t be read and were NOT imported';
+    $('csvResult').textContent = msg + '.';
+    $('csvFile').value = '';
+  };
+  reader.readAsText(f);
+});
+$('manualForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var cents = Math.round(parseFloat($('mAmount').value) * 100);
+  if (!cents || cents < 0) return;
+  var dir = $('mDir').value, src = $('mSource').value, merchant = $('mMerchant').value.trim();
+  var cat = $('mCat').value;
+  state.txns.push({ id: uid(), date: $('mDate').value, cents: cents, direction: dir, merchant: merchant, source: src, category: cat, note: $('mNote').value.trim() });
+  save(); renderAll();
+  $('manualForm').reset(); $('mDate').value = P.todayISO();
+  document.querySelector('[data-view="txns"]').click();
+});
+$('searchBox').addEventListener('input', renderTxns);
+$('filterSource').addEventListener('change', renderTxns);
+$('filterCat').addEventListener('change', renderTxns);
+
+/* ---------- Backup / erase ---------- */
+function download(name, text, type) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: type })); a.download = name; a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+}
+$('exportJsonBtn').addEventListener('click', function () { download('budget-backup.json', JSON.stringify(state, null, 2), 'application/json'); });
+$('exportCsvBtn').addEventListener('click', function () {
+  var rows = [['date', 'merchant', 'amount', 'direction', 'category', 'source', 'note']];
+  state.txns.forEach(function (t) { rows.push([t.date, t.merchant, (t.cents / 100).toFixed(2), t.direction, t.category, t.source, t.note || '']); });
+  download('budget-transactions.csv', rows.map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n'), 'text/csv');
+});
+$('restoreFile').addEventListener('change', function () {
+  var f = $('restoreFile').files[0]; if (!f) return;
+  var reader = new FileReader();
+  reader.onload = function () {
+    try {
+      var s = JSON.parse(String(reader.result || ''));
+      if (!s || !Array.isArray(s.txns)) throw new Error('bad file');
+      state = { txns: s.txns, budgets: s.budgets || {}, pin: state.pin }; save(); renderAll();
+      $('settingsResult').textContent = 'Backup restored: ' + state.txns.length + ' transactions.';
+    } catch (e) { $('settingsResult').textContent = 'That file isn’t a valid backup — nothing was changed.'; }
+    $('restoreFile').value = '';
+  };
+  reader.readAsText(f);
+});
+$('clearBtn').addEventListener('click', function () {
+  if (!confirm('Erase ALL budget data stored on this device? This cannot be undone.')) return;
+  if (!confirm('Really erase everything? Export a backup first if you might want it back.')) return;
+  state = blank(); save(); renderAll();
+  $('settingsResult').textContent = 'All data erased from this device.';
+});
+
+/* ---------- Auto-import from link (#import=<url-encoded notification text>) ----------
+   Used by the iOS Shortcuts automation: a bank text opens the tracker with the
+   alert text in the hash, the tracker files it, then wipes the hash so the
+   amount/merchant never lingers in the address bar or history. */
+function handleHashImport() {
+  var m = (location.hash || '').match(/^#(?:import|add)=(.+)$/);
+  if (!m) return;
+  var text = '';
+  try { text = decodeURIComponent(m[1].replace(/\+/g, '%20')); } catch (e) { text = ''; }
+  history.replaceState(null, '', location.pathname + location.search);
+  if (!text) return;
+  var res = P.parseBulk(text, P.todayISO());
+  var banner = $('autoImportBanner');
+  document.querySelector('[data-view="add"]').click();
+  banner.classList.remove('hidden');
+  if (!res.txns.length) {
+    banner.textContent = 'An automation sent a message I couldn’t read as a transaction: “' + text.slice(0, 90) + '” — nothing was added. You can fix it up by hand below.';
+    return;
+  }
+  var added = addTxns(res.txns);
+  banner.textContent = 'Auto-import: filed ' + added.added.length + ' new transaction' + (added.added.length === 1 ? '' : 's') +
+    (added.dupes ? ', skipped ' + added.dupes + ' duplicate' + (added.dupes === 1 ? '' : 's') : '') +
+    (res.skipped.length ? ', couldn’t parse ' + res.skipped.length + ' line' + (res.skipped.length === 1 ? '' : 's') : '') + '.';
+}
+
+/* ---------- Theme: light/dark, saved on-device, defaults to the phone's setting ---------- */
+var THEME_KEY = 'mb_theme';
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  var m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute('content', t === 'dark' ? '#000000' : '#ffffff');
+}
+function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
+(function initTheme() {
+  var saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+  if (saved !== 'dark' && saved !== 'light') {
+    saved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+  applyTheme(saved);
+})();
+$('themeBtn').addEventListener('click', function () {
+  var next = currentTheme() === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+});
+
+/* ---------- Force reload: drop cached app files + service worker, keep localStorage data ---------- */
+function reloadApp(btn) {
+  var old = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = 'Reloading…'; btn.disabled = true; }
+  var jobs = [];
+  if ('serviceWorker' in navigator) {
+    jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+      return Promise.all(regs.map(function (r) { return r.unregister(); }));
+    }).catch(function () {}));
+  }
+  if (window.caches && caches.keys) {
+    jobs.push(caches.keys().then(function (ks) {
+      return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+    }).catch(function () {}));
+  }
+  Promise.all(jobs).then(function () {
+    var url = location.pathname + '?v=' + Date.now() + location.hash;
+    location.replace(url);
+  });
+  setTimeout(function () { if (btn) { btn.textContent = old; btn.disabled = false; } }, 4000);
+}
+$('reloadBtn').addEventListener('click', function () { reloadApp($('reloadBtn')); });
+$('reloadBtn2').addEventListener('click', function () { reloadApp($('reloadBtn2')); });
+
+/* ---------- Init ---------- */
+P.CATEGORIES.forEach(function (c) {
+  $('mCat').insertAdjacentHTML('beforeend', '<option>' + c + '</option>');
+  $('filterCat').insertAdjacentHTML('beforeend', '<option>' + c + '</option>');
+});
+$('mDate').value = P.todayISO();
+if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () {}); }
+if (state.pin) showLock(); else { unlocked = true; showApp(); }
+if (unlocked) handleHashImport();
+window.addEventListener('hashchange', function () { if (unlocked) handleHashImport(); });
+})();
+
+</script>
 </body>
 </html>
