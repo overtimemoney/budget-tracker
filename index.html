@@ -222,6 +222,10 @@ input,select,textarea{min-width:0}
 .recAmt{white-space:nowrap}
 .budgetHead{flex-wrap:wrap}
 .budgetHead span{text-align:right}
+/* iOS WebKit gives native date fields a stubborn minimum width that ignores
+   min-width and pushes the box off-screen; resetting the appearance makes the
+   field shrink like a normal input (the date picker still opens on tap). */
+input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
 
 </style>
 </head>
