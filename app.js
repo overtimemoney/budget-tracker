@@ -229,7 +229,7 @@ function renderHome() {
       pace = 'Budget pace: ' + fmt(t.spent) + ' spent of ' + fmt(totalBudget) + ' budgeted · straight-line pace for today is ' + fmt(expected) + (t.spent <= expected ? ' — you’re on pace' : ' — ahead of pace');
     }
   } else if (period === 'week') {
-    pace = 'Transfers (Venmo, card payments) are listed but never counted as spending.';
+    pace = 'Transfers (card payments, Venmo-to-bank) are listed but never counted as spending.';
   }
   $('paceLine').textContent = pace;
   // Daily bars
@@ -364,7 +364,23 @@ function renderBudgets() {
     });
   });
 }
-function renderAll() { if (!unlocked) return; fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+/* One-time recount (Nov 2026): Venmo payments to/from people are real money
+   and count; only Venmo→bank cash-outs and card-bill payments never count. */
+function migrateCountFix() {
+  if (state.countFixV17) return;
+  state.countFixV17 = true;
+  var changed = false;
+  state.txns.forEach(function (t) {
+    if (t.source === 'Venmo' && t.category === 'Transfer' && !/bank/i.test(t.merchant)) {
+      t.category = t.direction === 'in' ? 'Income' : P.categorize(t.merchant + ' ' + (t.note || ''), t.source, t.direction);
+      changed = true;
+    } else if ((t.source === 'Capital One' || t.source === 'BofA') && /payment/i.test(t.merchant) && t.category !== 'Transfer') {
+      t.category = 'Transfer'; changed = true;
+    }
+  });
+  if (changed) save();
+}
+function renderAll() { if (!unlocked) return; migrateCountFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 
 /* ---------- Adding / importing (dedup + honest counts) ---------- */
 function addTxns(drafts) {
@@ -542,7 +558,7 @@ function syncGmail(interactive) {
               if (g) {
                 var from = gmailHeader(full, 'from').toLowerCase();
                 g.source = from.indexOf('venmo') >= 0 ? 'Venmo' : (from.indexOf('capitalone') >= 0 ? 'Capital One' : (from.indexOf('bankofamerica') >= 0 ? 'BofA' : (from.indexOf('gusto') >= 0 ? 'Gusto' : g.source)));
-                if (g.source === 'Venmo') g.category = 'Transfer';
+                if (g.source === 'Venmo' && /bank transfer/i.test(g.merchant)) g.category = 'Transfer';
                 drafts.push(g);
               } else ignored++;
               seen[id] = 1;

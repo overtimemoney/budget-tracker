@@ -16,7 +16,6 @@ var RULES = [
 ];
 function categorize(merchant, source, direction) {
   if (direction === 'in') return 'Income';
-  if (source === 'Venmo') return 'Transfer';
   var m = String(merchant || '');
   for (var i = 0; i < RULES.length; i++) if (RULES[i][0].test(m)) return RULES[i][1];
   if (/hotel|airbnb|flight|airlines/i.test(m)) return 'Travel';
@@ -88,9 +87,15 @@ function parseNotification(line, fallbackDate) {
   var date = extractDate(text, fallbackDate);
   var merchant = '', direction = 'out', m;
 
-  // Paying your own Capital One / BofA card is moving money between your own
-  // accounts — never new spending. File it as a Transfer so it never counts.
-  if ((source === 'Capital One' || source === 'BofA') && /payment/i.test(text) && !/refund|deposit/i.test(text)) {
+  // Paying your own Capital One / BofA card bill is moving money between your
+  // own accounts — never new spending; the individual charges count instead.
+  // Decisive signals only: "payment" in the subject (the first line of the
+  // combined text) or an explicit payment-posted phrase in the body. A bare
+  // /refund|deposit/ guard is NOT used — full email bodies carry boilerplate
+  // ("manage your direct deposit…") that used to defeat this rule.
+  var firstLine = text.split('\n')[0];
+  if ((source === 'Capital One' || source === 'BofA') && /payment/i.test(text) &&
+      (/payment/i.test(firstLine) || /payment (?:has |was )?(?:posted|received|made|scheduled)|thank you for your payment|card payment|autopay payment/i.test(text))) {
     return mk(date, cents, 'out', source + ' payment', source, '');
   }
 
@@ -106,6 +111,21 @@ function parseNotification(line, fallbackDate) {
     merchant = cleanMerchant(m[1]); direction = 'out'; if (/venmo/i.test(text)) source = 'Venmo';
     return mk(date, cents, direction, merchant, source, '');
   }
+  // "Sebastien Torres paid $13.00 to your Venmo account." — money in from a
+  // person (NOT a bank transfer, despite the follow-on sentence mentioning
+  // transferring it to a bank).
+  if (source === 'Venmo' && (m = text.match(/^(.+?) paid \$[\d,.]+ to your Venmo account/im))) {
+    return mk(date, cents, 'in', cleanMerchant(m[1]), 'Venmo', '');
+  }
+  // Venmo cash-out to his own bank account: moving his own money, not a
+  // payment to a person. Runs AFTER the person-payment branches above (so an
+  // incoming "X paid $… to your Venmo account" email, which also mentions
+  // transferring to a bank, is never mistaken for a cash-out) but BEFORE the
+  // generic "$… to …" branch below, which would grab "your bank account" as
+  // the merchant.
+  if (source === 'Venmo' && /bank/i.test(text) && /(you (?:transferred|initiated)|your transfer|money is on its way|transfer is on its way)/i.test(text)) {
+    return mk(date, cents, 'out', 'Bank transfer', 'Venmo', '');
+  }
   if (/venmo/i.test(text) && (m = text.match(/\$[\d,.]+\s*(?:to|from)\s+(.+?)(?:\s+for\b|[.·]|$)/i))) {
     merchant = cleanMerchant(m[1]); direction = /from/i.test(text) ? 'in' : 'out'; source = 'Venmo';
     return mk(date, cents, direction, merchant, source, '');
@@ -120,9 +140,9 @@ function parseNotification(line, fallbackDate) {
   return mk(date, cents, direction, merchant, source, '');
 }
 function mk(date, cents, direction, merchant, source, note) {
-  var cat = categorize(merchant, source, direction);
+  var cat = categorize(source === 'Venmo' ? merchant + ' ' + (note || '') : merchant, source, direction);
   if ((source === 'Capital One' || source === 'BofA') && /payment/i.test(merchant)) cat = 'Transfer'; // paying your own card is not spending or income
-  else if (source === 'Venmo') cat = 'Transfer'; // Venmo in/out defaults to Transfer: excluded from spent/income until the user recategorizes it
+  else if (source === 'Venmo' && /bank transfer/i.test(merchant)) cat = 'Transfer'; // Venmo cash-out to his own bank is not spending or income
   else if (direction === 'in') cat = 'Income';
   if ((merchant === 'Purchase' || merchant === 'Unknown') && direction === 'in') merchant = 'Deposit';
   return { date: date, cents: cents, direction: direction, merchant: merchant, source: source, category: cat, note: note || '' };
@@ -261,7 +281,9 @@ function parseGmailAlert(from, subject, dateISO) {
   }
   if (sender.indexOf('venmo') >= 0) {
     if ((m = subj.match(/^You paid (.+?) \$([\d,]+\.\d{2})/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'out', cleanMerchant(m[1]), 'Venmo', '');
+    if ((m = subj.match(/^(.+?) paid \$([\d,]+\.\d{2}) to your Venmo account/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'in', cleanMerchant(m[1]), 'Venmo', '');
     if ((m = subj.match(/^(.+?) paid (?:you )?\$([\d,]+\.\d{2})(?:\s+for\s+(.+))?$/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'in', cleanMerchant(m[1]), 'Venmo', m[3] ? cleanMerchant(m[3]) : '');
+    if (/bank/i.test(subj) && (m = subj.match(/transfer\w*\s+(?:of\s+)?\$([\d,]+\.\d{2})/i))) return mk(date, Math.round(parseFloat(m[1].replace(/,/g, '')) * 100), 'out', 'Bank transfer', 'Venmo', '');
     return null;
   }
   var src = sender.indexOf('capitalone') >= 0 ? 'Capital One' : (sender.indexOf('bankofamerica') >= 0 ? 'BofA' : null);
