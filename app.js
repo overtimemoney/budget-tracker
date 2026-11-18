@@ -4,12 +4,13 @@
 var P = window.PBT;
 var KEY = 'pbt-v1';
 var state = load();
+if (!Array.isArray(state.rules)) state.rules = []; // states saved before rules existed
 var period = 'week';
 var barSel = null; // ISO date of the tapped daily bar, if any
 var anchor = P.todayISO();
 var unlocked = !state.pin;
 
-function blank() { return { txns: [], budgets: {}, pin: null, recurring: [] }; }
+function blank() { return { txns: [], budgets: {}, pin: null, recurring: [], rules: [] }; }
 function load() {
   try { var raw = localStorage.getItem(KEY); if (raw) { var s = JSON.parse(raw); if (s && Array.isArray(s.txns)) return s; } } catch (e) {}
   return blank();
@@ -420,7 +421,46 @@ function showOmitToast(batch) {
   if (undoTimer) clearTimeout(undoTimer);
   undoTimer = setTimeout(hideUndoToast, 10000);
 }
-/* One-time: omit card-bill payments that were imported before auto-omit existed. */
+/* Omit + create a rule: the rule also sweeps matching items already in the
+   list, and (via addTxns) every future import. Undo removes the rule too. */
+function omitWithRules(ids) {
+  var newRules = [], seenKey = {};
+  (state.rules || []).forEach(function (r) { seenKey[normMerchant(r.merchant) + '|' + r.source] = 1; });
+  state.txns.forEach(function (t) {
+    if (ids.indexOf(t.id) < 0) return;
+    var k = normMerchant(t.merchant) + '|' + t.source;
+    if (!seenKey[k]) { seenKey[k] = 1; var r = { id: uid(), merchant: t.merchant, source: t.source }; state.rules.push(r); newRules.push(r); }
+  });
+  var batch = [];
+  state.txns.forEach(function (t) { if (!t.omitted && (ids.indexOf(t.id) >= 0 || matchesAnyRule(t))) { t.omitted = true; batch.push(t); } });
+  if (!batch.length && !newRules.length) return;
+  save(); renderAll();
+  showRuleOmitToast(batch, newRules);
+}
+function showRuleOmitToast(batch, rules) {
+  omitSlot = batch;
+  var created = rules;
+  $('toastMsg').textContent = 'Omitted ' + batch.length + ' item' + (batch.length === 1 ? '' : 's') + (created.length ? ' · rule created: ' + created.map(function (r) { return r.merchant; }).join(', ') : '');
+  $('toastUndo').onclick = function () {
+    if (omitSlot) omitSlot.forEach(function (t) { t.omitted = false; });
+    if (created.length) { var rids = created.map(function (r) { return r.id; }); state.rules = state.rules.filter(function (r) { return rids.indexOf(r.id) < 0; }); }
+    omitSlot = null;
+    save(); renderAll();
+    hideUndoToast();
+  };
+  $('toast').classList.remove('hidden');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+function renderRules() {
+  var box = $('rulesList');
+  if (!box) return;
+  var rules = state.rules || [];
+  box.innerHTML = rules.length ? rules.map(function (r) {
+    var n = state.txns.filter(function (t) { return t.omitted && ruleMatches(r, t); }).length;
+    return '<div class="txn out"><div class="txnMain"><strong>' + esc(r.merchant) + '</strong><span class="meta">' + esc(r.source) + ' · omitting ' + n + ' now</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
+  }).join('') : '<p class="hint">No rules yet — select a transaction, tap Omit, then “Omit all similar”.</p>';
+}
 function migrateOmitFix() {
   if (state.omitFixV22) return;
   state.omitFixV22 = true;
@@ -439,14 +479,18 @@ function renderOmitted() {
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
   }).join('') : '<p class="hint">Nothing omitted right now.</p>';
 }
-function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 
 /* ---------- Adding / importing (dedup + honest counts) ---------- */
 /* Card-bill payments (Capital One / BofA) are omitted on arrival: paying the
    bill is not spending — the individual charges are what count. */
 function isCardPayment(t) { return (t.source === 'Capital One' || t.source === 'BofA') && /payment/i.test(t.merchant || ''); }
+/* User rules ("omit all similar"): match on merchant name + source. */
+function normMerchant(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+function ruleMatches(rule, t) { return (rule.source === 'Any' || rule.source === t.source) && normMerchant(rule.merchant) === normMerchant(t.merchant); }
+function matchesAnyRule(t) { return (state.rules || []).some(function (r) { return ruleMatches(r, t); }); }
 function addTxns(drafts) {
-  var withIds = drafts.map(function (d) { var t = Object.assign({ id: uid() }, d); if (isCardPayment(t)) t.omitted = true; return t; });
+  var withIds = drafts.map(function (d) { var t = Object.assign({ id: uid() }, d); if (isCardPayment(t) || matchesAnyRule(t)) t.omitted = true; return t; });
   var res = P.dedup(state.txns, withIds);
   state.txns = state.txns.concat(res.added); save(); renderAll();
   return res;
@@ -499,11 +543,26 @@ $('selDeleteBtn').addEventListener('click', function () {
   if (!ids.length) return;
   openConfirm('Delete ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') + '?', 'They will be removed from your list and your totals.', 'Delete', function () { deleteTxns(ids); setSelMode(false); });
 });
+var omitSheetIds = null;
 $('selOmitBtn').addEventListener('click', function () {
   var ids = Object.keys(selIds);
   if (!ids.length) return;
-  omitTxns(ids); setSelMode(false);
+  omitSheetIds = ids;
+  var keys = {}, names = [];
+  state.txns.forEach(function (t) {
+    if (ids.indexOf(t.id) < 0) return;
+    var k = normMerchant(t.merchant) + '|' + t.source;
+    if (!keys[k]) { keys[k] = 1; names.push(t.merchant + ' · ' + t.source); }
+  });
+  $('omitTitle').textContent = 'Omit ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') + '?';
+  $('omitDetail').textContent = '“Omit all similar” creates a rule for ' + names.join(' and ') + ' — it also omits matching items already in your list, and every future import with the same name and source.';
+  $('omitSheet').classList.remove('hidden');
 });
+function closeOmitSheet() { $('omitSheet').classList.add('hidden'); omitSheetIds = null; }
+$('omitCancelBtn').addEventListener('click', closeOmitSheet);
+$('omitSheet').addEventListener('click', function (e) { if (e.target === $('omitSheet')) closeOmitSheet(); });
+$('omitJustBtn').addEventListener('click', function () { var ids = omitSheetIds; closeOmitSheet(); if (ids) { omitTxns(ids); setSelMode(false); } });
+$('omitRuleBtn').addEventListener('click', function () { var ids = omitSheetIds; closeOmitSheet(); if (ids) { omitWithRules(ids); setSelMode(false); } });
 $('confirmCancel').addEventListener('click', closeConfirm);
 $('confirmOk').addEventListener('click', function () { var cb = confirmCb; closeConfirm(); if (cb) cb(); });
 $('confirmSheet').addEventListener('click', function (e) { if (e.target === $('confirmSheet')) closeConfirm(); });
@@ -512,6 +571,12 @@ $('omitList').addEventListener('click', function (e) {
   var b = e.target.closest ? e.target.closest('[data-restore]') : null;
   if (!b) return;
   state.txns.forEach(function (t) { if (t.id === b.dataset.restore) t.omitted = false; });
+  save(); renderAll();
+});
+$('rulesList').addEventListener('click', function (e) {
+  var b = e.target.closest ? e.target.closest('[data-del-rule]') : null;
+  if (!b) return;
+  state.rules = state.rules.filter(function (r) { return r.id !== b.dataset.delRule; });
   save(); renderAll();
 });
 
@@ -701,7 +766,7 @@ $('restoreFile').addEventListener('change', function () {
     try {
       var s = JSON.parse(String(reader.result || ''));
       if (!s || !Array.isArray(s.txns)) throw new Error('bad file');
-      state = { txns: s.txns, budgets: s.budgets || {}, pin: state.pin, recurring: s.recurring || [] }; save(); renderAll();
+      state = { txns: s.txns, budgets: s.budgets || {}, pin: state.pin, recurring: s.recurring || [], rules: s.rules || [] }; save(); renderAll();
       $('settingsResult').textContent = 'Backup restored: ' + state.txns.length + ' transactions.';
     } catch (e) { $('settingsResult').textContent = 'That file isn’t a valid backup — nothing was changed.'; }
     $('restoreFile').value = '';
