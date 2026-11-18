@@ -35,7 +35,7 @@ body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Text'
 ::selection{background:rgba(0,200,5,.25)}
 
 /* Header */
-header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:20px 0 8px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:calc(20px + env(safe-area-inset-top)) 0 8px}
 header h1{font-size:21px;font-weight:700;letter-spacing:-.02em;margin:0;color:var(--text)}
 .brand{display:flex;align-items:center;gap:10px}
 .brandTile{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;
@@ -198,3 +198,15 @@ button .ic{pointer-events:none}
 .sheetCard h3{margin:0 0 6px;font-size:17px;color:var(--text)}
 .sheetBtns{display:flex;gap:10px;margin-top:16px}
 .sheetBtns button{flex:1}
+/* Overflow guards: nothing sticks out past the screen, even with huge numbers */
+.row>*{min-width:0}
+input,select,textarea{min-width:0}
+.card strong{font-size:clamp(17px,5.6vw,22px)}
+.card.big strong{font-size:clamp(28px,10vw,44px);white-space:nowrap}
+.catRow{grid-template-columns:minmax(0,118px) 1fr auto}
+.catRow>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.catRow strong{white-space:nowrap}
+.txnAmt{white-space:nowrap}
+.recAmt{white-space:nowrap}
+.budgetHead{flex-wrap:wrap}
+.budgetHead span{text-align:right}
