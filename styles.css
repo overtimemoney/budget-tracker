@@ -103,6 +103,8 @@ label{font-size:13px;font-weight:600;color:var(--muted)}
 .barCol.sel span{color:var(--text);font-weight:700}
 .barReadout{text-align:center;font-size:13px;font-weight:600;color:var(--faint);min-height:18px;margin:0 0 4px}
 .barReadout.on{color:var(--text)}
+#omitList{margin-top:10px}
+#omitList .txn{align-items:center}
 .bar{width:100%;max-width:22px;background:var(--bar);border-radius:3px 3px 0 0;min-height:2px}
 .barCol span{font-size:10px;color:var(--faint);font-weight:600}
 

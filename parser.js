@@ -246,6 +246,7 @@ function periodRange(kind, anchorISO) {
 function totals(txns, range) {
   var spent = 0, income = 0, byCat = {}, byDay = {};
   txns.forEach(function (t) {
+    if (t.omitted) return; // omitted transactions never count and are hidden from lists
     if (t.date < range.start || t.date > range.end) return;
     if (t.direction === 'out' && t.category !== 'Transfer') { spent += t.cents; byCat[t.category] = (byCat[t.category] || 0) + t.cents; byDay[t.date] = (byDay[t.date] || 0) + t.cents; }
     else if (t.direction === 'in' && t.category !== 'Transfer') income += t.cents;

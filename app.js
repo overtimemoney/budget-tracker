@@ -187,6 +187,7 @@ function updateSelBar() {
   var n = Object.keys(selIds).length;
   $('selCount').textContent = n + ' selected';
   $('selDeleteBtn').textContent = n ? 'Delete (' + n + ')' : 'Delete';
+  $('selOmitBtn').textContent = n ? 'Omit (' + n + ')' : 'Omit';
 }
 function applySel(row, on) {
   var id = row.dataset.tid;
@@ -260,14 +261,14 @@ function renderHome() {
     var pct = t.spent ? Math.round(t.byCat[c] / t.spent * 100) : 0;
     return '<div class="catRow"><span>' + esc(c) + '</span><div class="track"><div class="fill" style="width:' + pct + '%"></div></div><strong>' + fmt(t.byCat[c]) + '</strong></div>';
   }).join('') : '<p class="hint">Nothing spent in this period yet.</p>';
-  var inRange = state.txns.filter(function (x) { return x.date >= range.start && x.date <= range.end; }).sort(function (a, b) { return b.date.localeCompare(a.date); }).slice(0, 8);
+  var inRange = state.txns.filter(function (x) { return !x.omitted && x.date >= range.start && x.date <= range.end; }).sort(function (a, b) { return b.date.localeCompare(a.date); }).slice(0, 8);
   $('recentList').innerHTML = inRange.map(function (x) { return txnRow(x, true); }).join('');
   $('homeEmpty').classList.toggle('hidden', state.txns.length > 0);
 }
 function renderTxns() {
   var q = ($('searchBox').value || '').toLowerCase(), fs = $('filterSource').value, fc = $('filterCat').value;
   var list = state.txns.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; }).filter(function (t) {
-    return (!q || (t.merchant + ' ' + (t.note || '')).toLowerCase().indexOf(q) >= 0) && (!fs || t.source === fs) && (!fc || t.category === fc);
+    return !t.omitted && (!q || (t.merchant + ' ' + (t.note || '')).toLowerCase().indexOf(q) >= 0) && (!fs || t.source === fs) && (!fc || t.category === fc);
   });
   lastFilteredIds = list.map(function (t) { return t.id; });
   var existing = {}; state.txns.forEach(function (t) { existing[t.id] = 1; });
@@ -396,11 +397,56 @@ function migrateCountFix() {
   });
   if (changed) save();
 }
-function renderAll() { if (!unlocked) return; migrateCountFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+/* ---------- Omit: hide a transaction from lists and totals without deleting it ---------- */
+var omitSlot = null;
+function omitTxns(ids) {
+  var batch = [];
+  state.txns.forEach(function (t) { if (ids.indexOf(t.id) >= 0 && !t.omitted) { t.omitted = true; batch.push(t); } });
+  if (!batch.length) return;
+  save(); renderAll();
+  showOmitToast(batch);
+}
+function showOmitToast(batch) {
+  omitSlot = batch;
+  $('toastMsg').textContent = batch.length === 1
+    ? 'Omitted ' + batch[0].merchant + ' ' + (batch[0].direction === 'in' ? '+' : '−') + fmt(batch[0].cents)
+    : 'Omitted ' + batch.length + ' items';
+  $('toastUndo').onclick = function () {
+    if (omitSlot) { omitSlot.forEach(function (t) { t.omitted = false; }); save(); renderAll(); }
+    omitSlot = null;
+    hideUndoToast();
+  };
+  $('toast').classList.remove('hidden');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+/* One-time: omit card-bill payments that were imported before auto-omit existed. */
+function migrateOmitFix() {
+  if (state.omitFixV22) return;
+  state.omitFixV22 = true;
+  var changed = false;
+  state.txns.forEach(function (t) { if (isCardPayment(t) && !t.omitted) { t.omitted = true; changed = true; } });
+  if (changed) save();
+}
+var omitOpen = false;
+function renderOmitted() {
+  var btn = $('omitToggleBtn'), box = $('omitList');
+  if (!btn || !box) return;
+  var list = state.txns.filter(function (t) { return t.omitted; }).sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; });
+  btn.textContent = (omitOpen ? 'Hide omitted' : 'Show omitted') + ' (' + list.length + ')';
+  box.innerHTML = list.length ? list.map(function (t) {
+    var sign = t.direction === 'in' ? '+' : '−';
+    return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
+  }).join('') : '<p class="hint">Nothing omitted right now.</p>';
+}
+function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 
 /* ---------- Adding / importing (dedup + honest counts) ---------- */
+/* Card-bill payments (Capital One / BofA) are omitted on arrival: paying the
+   bill is not spending — the individual charges are what count. */
+function isCardPayment(t) { return (t.source === 'Capital One' || t.source === 'BofA') && /payment/i.test(t.merchant || ''); }
 function addTxns(drafts) {
-  var withIds = drafts.map(function (d) { return Object.assign({ id: uid() }, d); });
+  var withIds = drafts.map(function (d) { var t = Object.assign({ id: uid() }, d); if (isCardPayment(t)) t.omitted = true; return t; });
   var res = P.dedup(state.txns, withIds);
   state.txns = state.txns.concat(res.added); save(); renderAll();
   return res;
@@ -435,7 +481,9 @@ $('manualForm').addEventListener('submit', function (e) {
   if (!cents || cents < 0) return;
   var dir = $('mDir').value, src = $('mSource').value, merchant = $('mMerchant').value.trim();
   var cat = $('mCat').value;
-  state.txns.push({ id: uid(), date: $('mDate').value, cents: cents, direction: dir, merchant: merchant, source: src, category: cat, note: $('mNote').value.trim() });
+  var mt = { id: uid(), date: $('mDate').value, cents: cents, direction: dir, merchant: merchant, source: src, category: cat, note: $('mNote').value.trim() };
+  if (isCardPayment(mt)) mt.omitted = true;
+  state.txns.push(mt);
   save(); renderAll();
   $('manualForm').reset(); $('mDate').value = P.todayISO();
   document.querySelector('[data-view="txns"]').click();
@@ -451,9 +499,21 @@ $('selDeleteBtn').addEventListener('click', function () {
   if (!ids.length) return;
   openConfirm('Delete ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') + '?', 'They will be removed from your list and your totals.', 'Delete', function () { deleteTxns(ids); setSelMode(false); });
 });
+$('selOmitBtn').addEventListener('click', function () {
+  var ids = Object.keys(selIds);
+  if (!ids.length) return;
+  omitTxns(ids); setSelMode(false);
+});
 $('confirmCancel').addEventListener('click', closeConfirm);
 $('confirmOk').addEventListener('click', function () { var cb = confirmCb; closeConfirm(); if (cb) cb(); });
 $('confirmSheet').addEventListener('click', function (e) { if (e.target === $('confirmSheet')) closeConfirm(); });
+$('omitToggleBtn').addEventListener('click', function () { omitOpen = !omitOpen; $('omitList').classList.toggle('hidden', !omitOpen); renderOmitted(); });
+$('omitList').addEventListener('click', function (e) {
+  var b = e.target.closest ? e.target.closest('[data-restore]') : null;
+  if (!b) return;
+  state.txns.forEach(function (t) { if (t.id === b.dataset.restore) t.omitted = false; });
+  save(); renderAll();
+});
 
 /* ---------- Direct Gmail sync ----------
    The app talks to Google directly from this phone: Google Identity Services
