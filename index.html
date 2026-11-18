@@ -563,10 +563,10 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
         <li>Uninstalling / clearing site data erases everything — export a backup first if you want to keep it.</li>
       </ul>
     </div>
-    <h3>Omitted transactions</h3>
+    <h3>Hidden transactions</h3>
     <div class="secBox">
-      <p class="hint">Omitted transactions stay saved on this phone but are hidden from Activity and never counted in your totals or budgets. Capital One and BofA card-bill payments are omitted automatically — the individual charges are what count. To omit something yourself: Activity → Select → tap the rows → Omit.</p>
-      <button id="omitToggleBtn" class="ghost" type="button">Show omitted (0)</button>
+      <p class="hint">Hidden transactions stay saved on this phone but don’t show in Activity and never count in your totals or budgets. Capital One and BofA card-bill payments are hidden automatically — the individual charges are what count. To hide something yourself: Activity → Select → tap the rows → Hide.</p>
+      <button id="omitToggleBtn" class="ghost" type="button">Show hidden (0)</button>
       <div id="omitList" class="hidden"></div>
     </div>
     <h3>Gmail sync</h3>
@@ -644,7 +644,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
 
 <div id="toast" class="toast hidden" role="status"><span id="toastMsg"></span><button id="toastUndo" type="button">Undo</button></div>
 
-<div id="selBar" class="selBar hidden"><span id="selCount">0 selected</span><span class="selSpacer"></span><button id="selAllBtn" class="ghost small" type="button">Select all</button><button id="selOmitBtn" class="ghost small" type="button">Omit</button><button id="selDeleteBtn" class="danger" type="button">Delete</button><button id="selCancelBtn" class="ghost small" type="button">Cancel</button></div>
+<div id="selBar" class="selBar hidden"><span id="selCount">0 selected</span><span class="selSpacer"></span><button id="selAllBtn" class="ghost small" type="button">Select all</button><button id="selOmitBtn" class="ghost small" type="button">Hide</button><button id="selDeleteBtn" class="danger" type="button">Delete</button><button id="selCancelBtn" class="ghost small" type="button">Cancel</button></div>
 
 <div id="confirmSheet" class="sheet hidden"><div class="sheetCard"><h3 id="confirmTitle">Delete this item?</h3><p id="confirmDetail" class="hint"></p><div class="sheetBtns"><button id="confirmCancel" class="ghost" type="button">Cancel</button><button id="confirmOk" class="danger" type="button">Delete</button></div></div></div>
 
@@ -1230,7 +1230,7 @@ function updateSelBar() {
   var n = Object.keys(selIds).length;
   $('selCount').textContent = n + ' selected';
   $('selDeleteBtn').textContent = n ? 'Delete (' + n + ')' : 'Delete';
-  $('selOmitBtn').textContent = n ? 'Omit (' + n + ')' : 'Omit';
+  $('selOmitBtn').textContent = n ? 'Hide (' + n + ')' : 'Hide';
 }
 function applySel(row, on) {
   var id = row.dataset.tid;
@@ -1452,8 +1452,8 @@ function omitTxns(ids) {
 function showOmitToast(batch) {
   omitSlot = batch;
   $('toastMsg').textContent = batch.length === 1
-    ? 'Omitted ' + batch[0].merchant + ' ' + (batch[0].direction === 'in' ? '+' : '−') + fmt(batch[0].cents)
-    : 'Omitted ' + batch.length + ' items';
+    ? batch[0].merchant + ' hidden'
+    : batch.length + ' items hidden';
   $('toastUndo').onclick = function () {
     if (omitSlot) { omitSlot.forEach(function (t) { t.omitted = false; }); save(); renderAll(); }
     omitSlot = null;
@@ -1476,11 +1476,11 @@ function renderOmitted() {
   var btn = $('omitToggleBtn'), box = $('omitList');
   if (!btn || !box) return;
   var list = state.txns.filter(function (t) { return t.omitted; }).sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; });
-  btn.textContent = (omitOpen ? 'Hide omitted' : 'Show omitted') + ' (' + list.length + ')';
+  btn.textContent = (omitOpen ? 'Hide the list' : 'Show hidden') + ' (' + list.length + ')';
   box.innerHTML = list.length ? list.map(function (t) {
     var sign = t.direction === 'in' ? '+' : '−';
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
-  }).join('') : '<p class="hint">Nothing omitted right now.</p>';
+  }).join('') : '<p class="hint">Nothing hidden right now.</p>';
 }
 function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 

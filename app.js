@@ -187,7 +187,7 @@ function updateSelBar() {
   var n = Object.keys(selIds).length;
   $('selCount').textContent = n + ' selected';
   $('selDeleteBtn').textContent = n ? 'Delete (' + n + ')' : 'Delete';
-  $('selOmitBtn').textContent = n ? 'Omit (' + n + ')' : 'Omit';
+  $('selOmitBtn').textContent = n ? 'Hide (' + n + ')' : 'Hide';
 }
 function applySel(row, on) {
   var id = row.dataset.tid;
@@ -409,8 +409,8 @@ function omitTxns(ids) {
 function showOmitToast(batch) {
   omitSlot = batch;
   $('toastMsg').textContent = batch.length === 1
-    ? 'Omitted ' + batch[0].merchant + ' ' + (batch[0].direction === 'in' ? '+' : '−') + fmt(batch[0].cents)
-    : 'Omitted ' + batch.length + ' items';
+    ? batch[0].merchant + ' hidden'
+    : batch.length + ' items hidden';
   $('toastUndo').onclick = function () {
     if (omitSlot) { omitSlot.forEach(function (t) { t.omitted = false; }); save(); renderAll(); }
     omitSlot = null;
@@ -433,11 +433,11 @@ function renderOmitted() {
   var btn = $('omitToggleBtn'), box = $('omitList');
   if (!btn || !box) return;
   var list = state.txns.filter(function (t) { return t.omitted; }).sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; });
-  btn.textContent = (omitOpen ? 'Hide omitted' : 'Show omitted') + ' (' + list.length + ')';
+  btn.textContent = (omitOpen ? 'Hide the list' : 'Show hidden') + ' (' + list.length + ')';
   box.innerHTML = list.length ? list.map(function (t) {
     var sign = t.direction === 'in' ? '+' : '−';
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
-  }).join('') : '<p class="hint">Nothing omitted right now.</p>';
+  }).join('') : '<p class="hint">Nothing hidden right now.</p>';
 }
 function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 
