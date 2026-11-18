@@ -187,6 +187,10 @@ button .ic{pointer-events:none}
 .recMain{flex:1;min-width:0}
 .recMain strong{display:block;font-size:14.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .recAmt{font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(88px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--bg);border-radius:999px;padding:11px 12px 11px 18px;font-size:14px;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,.28);max-width:calc(100vw - 32px)}
+.toast span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast button{background:var(--green-bright);color:#000;border:none;border-radius:999px;padding:7px 14px;font-weight:700;flex:none}
+.toast.hidden{display:none}
 
 </style>
 </head>
@@ -588,6 +592,8 @@ button .ic{pointer-events:none}
   </section>
 </main>
 
+<div id="toast" class="toast hidden" role="status"><span id="toastMsg"></span><button id="toastUndo" type="button">Undo</button></div>
+
 <nav id="tabBar" class="hidden">
   <button data-view="home" class="tab active"><span class="tabIcon"><svg class="ic" width="20" height="20"
   xmlns="http://www.w3.org/2000/svg"
@@ -738,6 +744,12 @@ function parseNotification(line, fallbackDate) {
   var date = extractDate(text, fallbackDate);
   var merchant = '', direction = 'out', m;
 
+  // Paying your own Capital One / BofA card is moving money between your own
+  // accounts — never new spending. File it as a Transfer so it never counts.
+  if ((source === 'Capital One' || source === 'BofA') && /payment/i.test(text) && !/refund|deposit/i.test(text)) {
+    return mk(date, cents, 'out', source + ' payment', source, '');
+  }
+
   // Venmo: "X paid you $25.00 for ..." / "You paid X $25.00"
   if ((m = text.match(/^(.*?)\s+paid you\b/i)) && source === 'Venmo' || /paid you/i.test(text)) {
     merchant = cleanMerchant((text.match(/^(.*?)\s+paid you\b/i) || [])[1] || 'Venmo');
@@ -765,7 +777,7 @@ function parseNotification(line, fallbackDate) {
 }
 function mk(date, cents, direction, merchant, source, note) {
   var cat = categorize(merchant, source, direction);
-  if (/card payment|payment.*thank you|autopay payment/i.test(merchant)) cat = 'Transfer'; // paying your own card is not income
+  if ((source === 'Capital One' || source === 'BofA') && /payment/i.test(merchant)) cat = 'Transfer'; // paying your own card is not spending or income
   else if (source === 'Venmo') cat = 'Transfer'; // Venmo in/out defaults to Transfer: excluded from spent/income until the user recategorizes it
   else if (direction === 'in') cat = 'Income';
   if ((merchant === 'Purchase' || merchant === 'Unknown') && direction === 'in') merchant = 'Deposit';
@@ -1040,10 +1052,32 @@ function bindTxnControls(root) {
   });
   root.querySelectorAll('.delBtn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      state.txns = state.txns.filter(function (x) { return x.id !== btn.dataset.id; });
+      var idx = -1, removed = null;
+      state.txns = state.txns.filter(function (x, i) { if (x.id === btn.dataset.id) { idx = i; removed = x; return false; } return true; });
+      if (!removed) return;
       save(); renderAll();
+      showUndoToast(removed, idx);
     });
   });
+}
+
+/* ---------- Undo toast: a delete is recoverable for 10 seconds ---------- */
+var undoSlot = null, undoTimer = null;
+function showUndoToast(txn, idx) {
+  undoSlot = { txn: txn, idx: idx };
+  $('toastMsg').textContent = 'Deleted ' + txn.merchant + ' ' + (txn.direction === 'in' ? '+' : '−') + fmt(txn.cents);
+  $('toastUndo').onclick = function () {
+    if (undoSlot) { state.txns.splice(Math.min(undoSlot.idx, state.txns.length), 0, undoSlot.txn); save(); renderAll(); }
+    hideUndoToast();
+  };
+  $('toast').classList.remove('hidden');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+function hideUndoToast() {
+  var t = $('toast'); if (t) t.classList.add('hidden');
+  undoSlot = null;
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
 }
 function weekLabel(startISO, endISO) {
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1326,7 +1360,7 @@ function gmailBodyText(part) {
   if (part.body && part.body.data) {
     var text = P.decodeBase64Url(part.body.data);
     if (part.mimeType === 'text/plain') out += text + '\n';
-    else if (part.mimeType === 'text/html') out += text.replace(/<[^>]+>/g, ' ') + '\n';
+    else if (part.mimeType === 'text/html') out += text.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(style|script|head)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ') + '\n';
   }
   (part.parts || []).forEach(function (p) { out += gmailBodyText(p); });
   return out;

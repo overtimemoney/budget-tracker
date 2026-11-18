@@ -74,6 +74,12 @@ function parseNotification(line, fallbackDate) {
   var date = extractDate(text, fallbackDate);
   var merchant = '', direction = 'out', m;
 
+  // Paying your own Capital One / BofA card is moving money between your own
+  // accounts — never new spending. File it as a Transfer so it never counts.
+  if ((source === 'Capital One' || source === 'BofA') && /payment/i.test(text) && !/refund|deposit/i.test(text)) {
+    return mk(date, cents, 'out', source + ' payment', source, '');
+  }
+
   // Venmo: "X paid you $25.00 for ..." / "You paid X $25.00"
   if ((m = text.match(/^(.*?)\s+paid you\b/i)) && source === 'Venmo' || /paid you/i.test(text)) {
     merchant = cleanMerchant((text.match(/^(.*?)\s+paid you\b/i) || [])[1] || 'Venmo');
@@ -101,7 +107,7 @@ function parseNotification(line, fallbackDate) {
 }
 function mk(date, cents, direction, merchant, source, note) {
   var cat = categorize(merchant, source, direction);
-  if (/card payment|payment.*thank you|autopay payment/i.test(merchant)) cat = 'Transfer'; // paying your own card is not income
+  if ((source === 'Capital One' || source === 'BofA') && /payment/i.test(merchant)) cat = 'Transfer'; // paying your own card is not spending or income
   else if (source === 'Venmo') cat = 'Transfer'; // Venmo in/out defaults to Transfer: excluded from spent/income until the user recategorizes it
   else if (direction === 'in') cat = 'Income';
   if ((merchant === 'Purchase' || merchant === 'Unknown') && direction === 'in') merchant = 'Deposit';

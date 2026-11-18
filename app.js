@@ -107,10 +107,32 @@ function bindTxnControls(root) {
   });
   root.querySelectorAll('.delBtn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      state.txns = state.txns.filter(function (x) { return x.id !== btn.dataset.id; });
+      var idx = -1, removed = null;
+      state.txns = state.txns.filter(function (x, i) { if (x.id === btn.dataset.id) { idx = i; removed = x; return false; } return true; });
+      if (!removed) return;
       save(); renderAll();
+      showUndoToast(removed, idx);
     });
   });
+}
+
+/* ---------- Undo toast: a delete is recoverable for 10 seconds ---------- */
+var undoSlot = null, undoTimer = null;
+function showUndoToast(txn, idx) {
+  undoSlot = { txn: txn, idx: idx };
+  $('toastMsg').textContent = 'Deleted ' + txn.merchant + ' ' + (txn.direction === 'in' ? '+' : '−') + fmt(txn.cents);
+  $('toastUndo').onclick = function () {
+    if (undoSlot) { state.txns.splice(Math.min(undoSlot.idx, state.txns.length), 0, undoSlot.txn); save(); renderAll(); }
+    hideUndoToast();
+  };
+  $('toast').classList.remove('hidden');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+function hideUndoToast() {
+  var t = $('toast'); if (t) t.classList.add('hidden');
+  undoSlot = null;
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
 }
 function weekLabel(startISO, endISO) {
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -393,7 +415,7 @@ function gmailBodyText(part) {
   if (part.body && part.body.data) {
     var text = P.decodeBase64Url(part.body.data);
     if (part.mimeType === 'text/plain') out += text + '\n';
-    else if (part.mimeType === 'text/html') out += text.replace(/<[^>]+>/g, ' ') + '\n';
+    else if (part.mimeType === 'text/html') out += text.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(style|script|head)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ') + '\n';
   }
   (part.parts || []).forEach(function (p) { out += gmailBodyText(p); });
   return out;

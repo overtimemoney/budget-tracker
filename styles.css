@@ -175,3 +175,7 @@ button .ic{pointer-events:none}
 .recMain{flex:1;min-width:0}
 .recMain strong{display:block;font-size:14.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .recAmt{font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(88px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--bg);border-radius:999px;padding:11px 12px 11px 18px;font-size:14px;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,.28);max-width:calc(100vw - 32px)}
+.toast span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast button{background:var(--green-bright);color:#000;border:none;border-radius:999px;padding:7px 14px;font-weight:700;flex:none}
+.toast.hidden{display:none}
