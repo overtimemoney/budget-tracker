@@ -5,6 +5,7 @@ var P = window.PBT;
 var KEY = 'pbt-v1';
 var state = load();
 var period = 'week';
+var barSel = null; // ISO date of the tapped daily bar, if any
 var anchor = P.todayISO();
 var unlocked = !state.pin;
 
@@ -86,6 +87,12 @@ function shiftAnchor(dir) {
   anchor = P.todayISO(d); renderHome();
 }
 $('prevPeriod').addEventListener('click', function () { shiftAnchor(-1); });
+$('dayBars').addEventListener('click', function (e) {
+  var col = e.target.closest('.barCol');
+  if (!col) return;
+  barSel = barSel === col.dataset.iso ? null : col.dataset.iso; // tap again to clear
+  renderHome();
+});
 $('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
 
 /* ---------- Rendering (all totals recomputed fresh from state.txns on every render) ---------- */
@@ -237,8 +244,17 @@ function renderHome() {
   var end = new Date(range.end + 'T12:00:00'), max = 1;
   while (cur <= end) { var iso = P.todayISO(cur); var v = t.byDay[iso] || 0; if (v > max) max = v; days.push({ iso: iso, v: v, dow: cur.toLocaleDateString('en-US', { weekday: 'narrow' }), dom: cur.getDate() }); cur.setDate(cur.getDate() + 1); }
   $('dayBars').innerHTML = days.map(function (d) {
-    return '<div class="barCol"><div class="bar" style="height:' + Math.max(2, Math.round(d.v / max * 64)) + 'px" title="' + d.iso + ' ' + fmt(d.v) + '"></div><span>' + (period === 'week' ? d.dow : d.dom) + '</span></div>';
+    return '<div class="barCol' + (d.iso === barSel ? ' sel' : '') + '" data-iso="' + d.iso + '"><div class="bar" style="height:' + Math.max(2, Math.round(d.v / max * 64)) + 'px" title="' + d.iso + ' ' + fmt(d.v) + '"></div><span>' + (period === 'week' ? d.dow : d.dom) + '</span></div>';
   }).join('');
+  var ro = $('barReadout'), selDay = null;
+  days.forEach(function (d) { if (d.iso === barSel) selDay = d; });
+  if (selDay) {
+    ro.textContent = new Date(selDay.iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + fmt(selDay.v) + (selDay.v > 0 ? ' spent' : ' — no spending');
+    ro.classList.add('on');
+  } else {
+    ro.textContent = 'Tap a bar to see that day’s total';
+    ro.classList.remove('on');
+  }
   var cats = Object.keys(t.byCat).sort(function (a, b) { return t.byCat[b] - t.byCat[a]; });
   $('catList').innerHTML = cats.length ? cats.map(function (c) {
     var pct = t.spent ? Math.round(t.byCat[c] / t.spent * 100) : 0;

@@ -110,7 +110,11 @@ label{font-size:13px;font-weight:600;color:var(--muted)}
 /* Daily bars — flat black, today in green */
 .bars{display:flex;gap:4px;align-items:flex-end;height:100px;background:transparent;
   border:none;border-bottom:1px solid var(--line-soft);border-radius:0;padding:10px 2px 8px;box-shadow:none}
-.barCol{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
+.barCol{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.barCol.sel .bar{background:var(--green)}
+.barCol.sel span{color:var(--text);font-weight:700}
+.barReadout{text-align:center;font-size:13px;font-weight:600;color:var(--faint);min-height:18px;margin:0 0 4px}
+.barReadout.on{color:var(--text)}
 .bar{width:100%;max-width:22px;background:var(--bar);border-radius:3px 3px 0 0;min-height:2px}
 .barCol span{font-size:10px;color:var(--faint);font-weight:600}
 
@@ -369,6 +373,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
     </div>
     <p id="paceLine" class="pace"></p>
     <h2>Daily spending</h2>
+    <p id="barReadout" class="barReadout">Tap a bar to see that day’s total</p>
     <div id="dayBars" class="bars"></div>
     <h2>Where it went</h2>
     <div id="catList"></div>
@@ -1033,6 +1038,7 @@ var P = window.PBT;
 var KEY = 'pbt-v1';
 var state = load();
 var period = 'week';
+var barSel = null; // ISO date of the tapped daily bar, if any
 var anchor = P.todayISO();
 var unlocked = !state.pin;
 
@@ -1114,6 +1120,12 @@ function shiftAnchor(dir) {
   anchor = P.todayISO(d); renderHome();
 }
 $('prevPeriod').addEventListener('click', function () { shiftAnchor(-1); });
+$('dayBars').addEventListener('click', function (e) {
+  var col = e.target.closest('.barCol');
+  if (!col) return;
+  barSel = barSel === col.dataset.iso ? null : col.dataset.iso; // tap again to clear
+  renderHome();
+});
 $('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
 
 /* ---------- Rendering (all totals recomputed fresh from state.txns on every render) ---------- */
@@ -1265,8 +1277,17 @@ function renderHome() {
   var end = new Date(range.end + 'T12:00:00'), max = 1;
   while (cur <= end) { var iso = P.todayISO(cur); var v = t.byDay[iso] || 0; if (v > max) max = v; days.push({ iso: iso, v: v, dow: cur.toLocaleDateString('en-US', { weekday: 'narrow' }), dom: cur.getDate() }); cur.setDate(cur.getDate() + 1); }
   $('dayBars').innerHTML = days.map(function (d) {
-    return '<div class="barCol"><div class="bar" style="height:' + Math.max(2, Math.round(d.v / max * 64)) + 'px" title="' + d.iso + ' ' + fmt(d.v) + '"></div><span>' + (period === 'week' ? d.dow : d.dom) + '</span></div>';
+    return '<div class="barCol' + (d.iso === barSel ? ' sel' : '') + '" data-iso="' + d.iso + '"><div class="bar" style="height:' + Math.max(2, Math.round(d.v / max * 64)) + 'px" title="' + d.iso + ' ' + fmt(d.v) + '"></div><span>' + (period === 'week' ? d.dow : d.dom) + '</span></div>';
   }).join('');
+  var ro = $('barReadout'), selDay = null;
+  days.forEach(function (d) { if (d.iso === barSel) selDay = d; });
+  if (selDay) {
+    ro.textContent = new Date(selDay.iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + fmt(selDay.v) + (selDay.v > 0 ? ' spent' : ' — no spending');
+    ro.classList.add('on');
+  } else {
+    ro.textContent = 'Tap a bar to see that day’s total';
+    ro.classList.remove('on');
+  }
   var cats = Object.keys(t.byCat).sort(function (a, b) { return t.byCat[b] - t.byCat[a]; });
   $('catList').innerHTML = cats.length ? cats.map(function (c) {
     var pct = t.spent ? Math.round(t.byCat[c] / t.spent * 100) : 0;
