@@ -59,6 +59,7 @@ function detectSource(text) {
   if (/venmo/i.test(text)) return 'Venmo';
   if (/capital one/i.test(text)) return 'Capital One';
   if (/bank of america|bofa|bk of america/i.test(text)) return 'BofA';
+  if (/gusto/i.test(text)) return 'Gusto';
   return 'Other';
 }
 
@@ -66,6 +67,19 @@ function detectSource(text) {
 function parseNotification(line, fallbackDate) {
   var text = String(line || '').trim();
   if (!text) return null;
+  // Gusto payday email: the amount that matters is the "Check amount" (the
+  // net deposit). Anchor on it so promo amounts elsewhere in the email (a
+  // $800 referral gift card) are never picked up. The pay date is in the
+  // subject; do NOT run extractDate over the whole body — it would grab the
+  // pay-period start date instead.
+  if (/gusto/i.test(text) && /getting paid today|check amount/i.test(text)) {
+    var gm = text.match(/check amount[\s\S]{0,60}?\$([\d,]+\.\d{2})/i);
+    if (!gm) return null;
+    var gd = text.match(/getting paid today\s*\((\d{1,2})\/(\d{1,2})\/(\d{4})\)/i);
+    var gdate = gd ? gd[3] + '-' + String(gd[1]).padStart(2, '0') + '-' + String(gd[2]).padStart(2, '0') : (fallbackDate || todayISO());
+    var per = text.match(/pay period[\s\S]{0,40}?(\d{4}-\d{2}-\d{2}\s*[–-]\s*\d{4}-\d{2}-\d{2})/i);
+    return mk(gdate, Math.round(parseFloat(gm[1].replace(/,/g, '')) * 100), 'in', 'Paycheck', 'Gusto', per ? 'Pay period ' + per[1].replace(/\s+/g, ' ') : '');
+  }
   var amtM = text.match(/\$\s?([\d,]+\.\d{2}|[\d,]+)/);
   if (!amtM) return null;
   var cents = Math.abs(moneyToCents(amtM[1]));
@@ -223,7 +237,7 @@ function totals(txns, range) {
 /* ---- Gmail alert emails (used by the direct Gmail sync) ----
    Mirrors the subject rules of the Luna-side scanner: only completed payments
    count; requests, cancellations, comments, statements and marketing are out. */
-var GMAIL_SENDERS = ['venmo@venmo.com', 'capitalone@notification.capitalone.com', 'onlinebanking@ealerts.bankofamerica.com'];
+var GMAIL_SENDERS = ['venmo@venmo.com', 'capitalone@notification.capitalone.com', 'onlinebanking@ealerts.bankofamerica.com', 'gustonoreply@gusto.com'];
 function gmailSearchQuery(sinceISO) {
   var d = new Date(sinceISO + 'T12:00:00');
   var p = function (x) { return String(x).padStart(2, '0'); };
@@ -238,6 +252,13 @@ function parseGmailAlert(from, subject, dateISO) {
   var skip = ['request', 'cancel', 'comment', 'history', 'statement', 'security', 'rewards', 'autopay', 'password', 'verification', 'sign-in', 'sign in'];
   for (var i = 0; i < skip.length; i++) if (low.indexOf(skip[i]) >= 0) return null;
   var m;
+  if (sender.indexOf('gusto') >= 0) {
+    // Payday subjects carry no amount — return null so the sync fetches the
+    // full email and parseNotification reads the Check amount from the body.
+    // Non-payday Gusto mail (welcome notes etc.) also lands here and is
+    // ignored by parseNotification, which requires the payday markers.
+    return null;
+  }
   if (sender.indexOf('venmo') >= 0) {
     if ((m = subj.match(/^You paid (.+?) \$([\d,]+\.\d{2})/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'out', cleanMerchant(m[1]), 'Venmo', '');
     if ((m = subj.match(/^(.+?) paid (?:you )?\$([\d,]+\.\d{2})(?:\s+for\s+(.+))?$/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'in', cleanMerchant(m[1]), 'Venmo', m[3] ? cleanMerchant(m[3]) : '');

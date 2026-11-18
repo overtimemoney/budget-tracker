@@ -541,7 +541,7 @@ function syncGmail(interactive) {
               var g = P.parseNotification(text, dateISO);
               if (g) {
                 var from = gmailHeader(full, 'from').toLowerCase();
-                g.source = from.indexOf('venmo') >= 0 ? 'Venmo' : (from.indexOf('capitalone') >= 0 ? 'Capital One' : (from.indexOf('bankofamerica') >= 0 ? 'BofA' : g.source));
+                g.source = from.indexOf('venmo') >= 0 ? 'Venmo' : (from.indexOf('capitalone') >= 0 ? 'Capital One' : (from.indexOf('bankofamerica') >= 0 ? 'BofA' : (from.indexOf('gusto') >= 0 ? 'Gusto' : g.source)));
                 if (g.source === 'Venmo') g.category = 'Transfer';
                 drafts.push(g);
               } else ignored++;
