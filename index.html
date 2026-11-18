@@ -564,6 +564,14 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
         <li>Uninstalling / clearing site data erases everything — export a backup first if you want to keep it.</li>
       </ul>
     </div>
+    <h3>Built-in rules</h3>
+    <div class="secBox">
+      <ul>
+        <li><strong>Capital One / BofA card-bill payments</strong> — omitted automatically when they import. Paying the bill isn’t spending; the individual charges are what count.</li>
+        <li><strong>Venmo transfers to your own bank</strong> — filed as Transfer, so they never count as spending or income.</li>
+      </ul>
+      <p class="hint">These run on every import (Gmail sync, CSV, paste) before anything reaches your list. Anything the first rule catches lands under Omitted transactions below, where you can restore it.</p>
+    </div>
     <h3>Omitted transactions</h3>
     <div class="secBox">
       <p class="hint">Omitted transactions stay saved on this phone but are hidden from Activity and never counted in your totals or budgets. Capital One and BofA card-bill payments are omitted automatically — the individual charges are what count. To omit something yourself: Activity → Select → tap the rows → Omit.</p>
