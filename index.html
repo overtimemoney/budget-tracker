@@ -191,6 +191,25 @@ button .ic{pointer-events:none}
 .toast span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast button{background:var(--green-bright);color:#000;border:none;border-radius:999px;padding:7px 14px;font-weight:700;flex:none}
 .toast.hidden{display:none}
+.selRow{display:flex;justify-content:flex-end;margin-top:10px}
+.selBox{display:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);align-items:center;justify-content:center;flex:none;color:#fff}
+#txnList.selecting .selBox{display:flex}
+#txnList.selecting .txn{touch-action:none;user-select:none;-webkit-user-select:none}
+#txnList.selecting .catSel,#txnList.selecting .delBtn{display:none}
+.txn.selected{background:var(--wash)}
+.txn.selected .selBox{background:var(--green);border-color:var(--green)}
+.selBox svg{opacity:0}
+.txn.selected .selBox svg{opacity:1}
+.selBar{position:fixed;left:0;right:0;bottom:0;z-index:55;max-width:560px;margin:0 auto;background:var(--panel);border-top:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));font-size:14px;font-weight:600}
+.selBar.hidden{display:none}
+.selBar button{width:auto;margin:0;flex:none}
+.selSpacer{flex:1}
+.sheet{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet.hidden{display:none}
+.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom))}
+.sheetCard h3{margin:0 0 6px;font-size:17px;color:var(--text)}
+.sheetBtns{display:flex;gap:10px;margin-top:16px}
+.sheetBtns button{flex:1}
 
 </style>
 </head>
@@ -352,6 +371,7 @@ button .ic{pointer-events:none}
       <select id="filterSource"><option value="">All sources</option><option>BofA</option><option>Capital One</option><option>Venmo</option><option>Manual</option><option>Recurring</option><option>Other</option></select>
       <select id="filterCat"><option value="">All categories</option></select>
     </div>
+    <div class="selRow"><button id="selectModeBtn" class="ghost small" type="button">Select</button></div>
     <div id="txnList"></div>
   </section>
 
@@ -593,6 +613,10 @@ button .ic{pointer-events:none}
 </main>
 
 <div id="toast" class="toast hidden" role="status"><span id="toastMsg"></span><button id="toastUndo" type="button">Undo</button></div>
+
+<div id="selBar" class="selBar hidden"><span id="selCount">0 selected</span><span class="selSpacer"></span><button id="selAllBtn" class="ghost small" type="button">Select all</button><button id="selDeleteBtn" class="danger" type="button">Delete</button><button id="selCancelBtn" class="ghost small" type="button">Cancel</button></div>
+
+<div id="confirmSheet" class="sheet hidden"><div class="sheetCard"><h3 id="confirmTitle">Delete this item?</h3><p id="confirmDetail" class="hint"></p><div class="sheetBtns"><button id="confirmCancel" class="ghost" type="button">Cancel</button><button id="confirmOk" class="danger" type="button">Delete</button></div></div></div>
 
 <nav id="tabBar" class="hidden">
   <button data-view="home" class="tab active"><span class="tabIcon"><svg class="ic" width="20" height="20"
@@ -1037,7 +1061,9 @@ $('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
 function txnRow(t, compact) {
   var sign = t.direction === 'in' ? '+' : '−';
   var cls = t.category === 'Transfer' ? 'transfer' : (t.direction === 'in' ? 'in' : 'out');
-  return '<div class="txn ' + cls + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
+  return '<div class="txn ' + cls + '" data-tid="' + t.id + '">' +
+    (compact ? '' : '<span class="selBox"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>') +
+    '<div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
     '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
     '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
     (compact ? '' : '<select class="catSel" data-id="' + t.id + '">' + P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><button class="delBtn" data-id="' + t.id + '" aria-label="Delete"><svg width="14" height="14" xmlns="http://www.w3.org/2000/svg" class="ic delIc" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg></button>') +
@@ -1052,22 +1078,33 @@ function bindTxnControls(root) {
   });
   root.querySelectorAll('.delBtn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      var idx = -1, removed = null;
-      state.txns = state.txns.filter(function (x, i) { if (x.id === btn.dataset.id) { idx = i; removed = x; return false; } return true; });
-      if (!removed) return;
-      save(); renderAll();
-      showUndoToast(removed, idx);
+      if (selMode) return;
+      var t = state.txns.filter(function (x) { return x.id === btn.dataset.id; })[0];
+      if (!t) return;
+      openConfirm('Delete this item?', t.merchant + ' · ' + (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date, 'Delete', function () { deleteTxns([t.id]); });
     });
   });
+  if (selMode && root.id === 'txnList') {
+    root.querySelectorAll('.txn').forEach(function (row) {
+      row.addEventListener('pointerdown', function (e) { startDragSelect(row, e); });
+    });
+  }
 }
 
 /* ---------- Undo toast: a delete is recoverable for 10 seconds ---------- */
 var undoSlot = null, undoTimer = null;
-function showUndoToast(txn, idx) {
-  undoSlot = { txn: txn, idx: idx };
-  $('toastMsg').textContent = 'Deleted ' + txn.merchant + ' ' + (txn.direction === 'in' ? '+' : '−') + fmt(txn.cents);
+function showUndoToast(removed) {
+  undoSlot = { items: removed };
+  $('toastMsg').textContent = removed.length === 1
+    ? 'Deleted ' + removed[0].txn.merchant + ' ' + (removed[0].txn.direction === 'in' ? '+' : '−') + fmt(removed[0].txn.cents)
+    : 'Deleted ' + removed.length + ' items';
   $('toastUndo').onclick = function () {
-    if (undoSlot) { state.txns.splice(Math.min(undoSlot.idx, state.txns.length), 0, undoSlot.txn); save(); renderAll(); }
+    if (undoSlot) {
+      undoSlot.items.slice().sort(function (a, b) { return a.idx - b.idx; }).forEach(function (it) {
+        state.txns.splice(Math.min(it.idx, state.txns.length), 0, it.txn);
+      });
+      save(); renderAll();
+    }
     hideUndoToast();
   };
   $('toast').classList.remove('hidden');
@@ -1079,6 +1116,61 @@ function hideUndoToast() {
   undoSlot = null;
   if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
 }
+function deleteTxns(ids) {
+  var removed = [];
+  state.txns = state.txns.filter(function (x, i) { if (ids.indexOf(x.id) >= 0) { removed.push({ txn: x, idx: i }); return false; } return true; });
+  if (!removed.length) return;
+  ids.forEach(function (id) { delete selIds[id]; });
+  save(); renderAll();
+  showUndoToast(removed);
+}
+
+/* ---------- Confirm sheet (asked before any delete) ---------- */
+var confirmCb = null;
+function openConfirm(title, detail, okLabel, cb) {
+  $('confirmTitle').textContent = title;
+  $('confirmDetail').textContent = detail || '';
+  $('confirmOk').textContent = okLabel || 'Delete';
+  confirmCb = cb;
+  $('confirmSheet').classList.remove('hidden');
+}
+function closeConfirm() { $('confirmSheet').classList.add('hidden'); confirmCb = null; }
+
+/* ---------- Select mode: tap rows or drag across them, delete together ---------- */
+var selMode = false, selIds = {}, dragSel = null, lastFilteredIds = [];
+function setSelMode(on) {
+  selMode = on;
+  if (!on) { selIds = {}; dragSel = null; }
+  $('selBar').classList.toggle('hidden', !on);
+  $('selectModeBtn').classList.toggle('hidden', on);
+  renderTxns();
+}
+function updateSelBar() {
+  var n = Object.keys(selIds).length;
+  $('selCount').textContent = n + ' selected';
+  $('selDeleteBtn').textContent = n ? 'Delete (' + n + ')' : 'Delete';
+}
+function applySel(row, on) {
+  var id = row.dataset.tid;
+  if (!id) return;
+  if (on) selIds[id] = 1; else delete selIds[id];
+  row.classList.toggle('selected', !!on);
+  updateSelBar();
+}
+function startDragSelect(row, e) {
+  if (!selMode || !row.dataset.tid) return;
+  e.preventDefault();
+  dragSel = { mode: !selIds[row.dataset.tid] };
+  applySel(row, dragSel.mode);
+}
+document.addEventListener('pointermove', function (e) {
+  if (!dragSel) return;
+  var el = document.elementFromPoint(e.clientX, e.clientY);
+  var row = el && el.closest ? el.closest('.txn') : null;
+  if (row && row.closest && row.closest('#txnList')) applySel(row, dragSel.mode);
+});
+document.addEventListener('pointerup', function () { dragSel = null; });
+document.addEventListener('pointercancel', function () { dragSel = null; });
 function weekLabel(startISO, endISO) {
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var s = new Date(startISO + 'T12:00:00'), e = new Date(endISO + 'T12:00:00');
@@ -1130,8 +1222,14 @@ function renderTxns() {
   var list = state.txns.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; }).filter(function (t) {
     return (!q || (t.merchant + ' ' + (t.note || '')).toLowerCase().indexOf(q) >= 0) && (!fs || t.source === fs) && (!fc || t.category === fc);
   });
+  lastFilteredIds = list.map(function (t) { return t.id; });
+  var existing = {}; state.txns.forEach(function (t) { existing[t.id] = 1; });
+  Object.keys(selIds).forEach(function (id) { if (!existing[id]) delete selIds[id]; });
   $('txnList').innerHTML = list.length ? list.map(function (t) { return txnRow(t, false); }).join('') : '<p class="hint">No transactions match.</p>';
+  $('txnList').classList.toggle('selecting', selMode);
+  if (selMode) $('txnList').querySelectorAll('.txn').forEach(function (row) { if (selIds[row.dataset.tid]) row.classList.add('selected'); });
   bindTxnControls($('txnList'));
+  updateSelBar();
 }
 
 /* ---------- Recurring expenses: file themselves on their due date ---------- */
@@ -1192,8 +1290,12 @@ function renderRecurring() {
   });
   $('recList').querySelectorAll('[data-rec-del]').forEach(function (b) {
     b.addEventListener('click', function () {
-      state.recurring = state.recurring.filter(function (x) { return x.id !== b.dataset.recDel; });
-      save(); renderAll();
+      var r = state.recurring.filter(function (x) { return x.id === b.dataset.recDel; })[0];
+      if (!r) return;
+      openConfirm('Delete this recurring expense?', r.name + ' · ' + fmt(r.cents) + ' · ' + (FREQ_LABEL[r.freq] || r.freq), 'Delete', function () {
+        state.recurring = state.recurring.filter(function (x) { return x.id !== b.dataset.recDel; });
+        save(); renderAll();
+      });
     });
   });
 }
@@ -1278,6 +1380,17 @@ $('manualForm').addEventListener('submit', function (e) {
 $('searchBox').addEventListener('input', renderTxns);
 $('filterSource').addEventListener('change', renderTxns);
 $('filterCat').addEventListener('change', renderTxns);
+$('selectModeBtn').addEventListener('click', function () { setSelMode(true); });
+$('selCancelBtn').addEventListener('click', function () { setSelMode(false); });
+$('selAllBtn').addEventListener('click', function () { lastFilteredIds.forEach(function (id) { selIds[id] = 1; }); renderTxns(); });
+$('selDeleteBtn').addEventListener('click', function () {
+  var ids = Object.keys(selIds);
+  if (!ids.length) return;
+  openConfirm('Delete ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') + '?', 'They will be removed from your list and your totals.', 'Delete', function () { deleteTxns(ids); setSelMode(false); });
+});
+$('confirmCancel').addEventListener('click', closeConfirm);
+$('confirmOk').addEventListener('click', function () { var cb = confirmCb; closeConfirm(); if (cb) cb(); });
+$('confirmSheet').addEventListener('click', function (e) { if (e.target === $('confirmSheet')) closeConfirm(); });
 
 /* ---------- Direct Gmail sync ----------
    The app talks to Google directly from this phone: Google Identity Services

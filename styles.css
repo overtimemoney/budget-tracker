@@ -179,3 +179,22 @@ button .ic{pointer-events:none}
 .toast span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast button{background:var(--green-bright);color:#000;border:none;border-radius:999px;padding:7px 14px;font-weight:700;flex:none}
 .toast.hidden{display:none}
+.selRow{display:flex;justify-content:flex-end;margin-top:10px}
+.selBox{display:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);align-items:center;justify-content:center;flex:none;color:#fff}
+#txnList.selecting .selBox{display:flex}
+#txnList.selecting .txn{touch-action:none;user-select:none;-webkit-user-select:none}
+#txnList.selecting .catSel,#txnList.selecting .delBtn{display:none}
+.txn.selected{background:var(--wash)}
+.txn.selected .selBox{background:var(--green);border-color:var(--green)}
+.selBox svg{opacity:0}
+.txn.selected .selBox svg{opacity:1}
+.selBar{position:fixed;left:0;right:0;bottom:0;z-index:55;max-width:560px;margin:0 auto;background:var(--panel);border-top:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));font-size:14px;font-weight:600}
+.selBar.hidden{display:none}
+.selBar button{width:auto;margin:0;flex:none}
+.selSpacer{flex:1}
+.sheet{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet.hidden{display:none}
+.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom))}
+.sheetCard h3{margin:0 0 6px;font-size:17px;color:var(--text)}
+.sheetBtns{display:flex;gap:10px;margin-top:16px}
+.sheetBtns button{flex:1}

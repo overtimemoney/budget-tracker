@@ -92,7 +92,9 @@ $('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
 function txnRow(t, compact) {
   var sign = t.direction === 'in' ? '+' : '−';
   var cls = t.category === 'Transfer' ? 'transfer' : (t.direction === 'in' ? 'in' : 'out');
-  return '<div class="txn ' + cls + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
+  return '<div class="txn ' + cls + '" data-tid="' + t.id + '">' +
+    (compact ? '' : '<span class="selBox"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>') +
+    '<div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
     '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
     '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
     (compact ? '' : '<select class="catSel" data-id="' + t.id + '">' + P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><button class="delBtn" data-id="' + t.id + '" aria-label="Delete"><svg width="14" height="14" xmlns="http://www.w3.org/2000/svg" class="ic delIc" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg></button>') +
@@ -107,22 +109,33 @@ function bindTxnControls(root) {
   });
   root.querySelectorAll('.delBtn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      var idx = -1, removed = null;
-      state.txns = state.txns.filter(function (x, i) { if (x.id === btn.dataset.id) { idx = i; removed = x; return false; } return true; });
-      if (!removed) return;
-      save(); renderAll();
-      showUndoToast(removed, idx);
+      if (selMode) return;
+      var t = state.txns.filter(function (x) { return x.id === btn.dataset.id; })[0];
+      if (!t) return;
+      openConfirm('Delete this item?', t.merchant + ' · ' + (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date, 'Delete', function () { deleteTxns([t.id]); });
     });
   });
+  if (selMode && root.id === 'txnList') {
+    root.querySelectorAll('.txn').forEach(function (row) {
+      row.addEventListener('pointerdown', function (e) { startDragSelect(row, e); });
+    });
+  }
 }
 
 /* ---------- Undo toast: a delete is recoverable for 10 seconds ---------- */
 var undoSlot = null, undoTimer = null;
-function showUndoToast(txn, idx) {
-  undoSlot = { txn: txn, idx: idx };
-  $('toastMsg').textContent = 'Deleted ' + txn.merchant + ' ' + (txn.direction === 'in' ? '+' : '−') + fmt(txn.cents);
+function showUndoToast(removed) {
+  undoSlot = { items: removed };
+  $('toastMsg').textContent = removed.length === 1
+    ? 'Deleted ' + removed[0].txn.merchant + ' ' + (removed[0].txn.direction === 'in' ? '+' : '−') + fmt(removed[0].txn.cents)
+    : 'Deleted ' + removed.length + ' items';
   $('toastUndo').onclick = function () {
-    if (undoSlot) { state.txns.splice(Math.min(undoSlot.idx, state.txns.length), 0, undoSlot.txn); save(); renderAll(); }
+    if (undoSlot) {
+      undoSlot.items.slice().sort(function (a, b) { return a.idx - b.idx; }).forEach(function (it) {
+        state.txns.splice(Math.min(it.idx, state.txns.length), 0, it.txn);
+      });
+      save(); renderAll();
+    }
     hideUndoToast();
   };
   $('toast').classList.remove('hidden');
@@ -134,6 +147,61 @@ function hideUndoToast() {
   undoSlot = null;
   if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
 }
+function deleteTxns(ids) {
+  var removed = [];
+  state.txns = state.txns.filter(function (x, i) { if (ids.indexOf(x.id) >= 0) { removed.push({ txn: x, idx: i }); return false; } return true; });
+  if (!removed.length) return;
+  ids.forEach(function (id) { delete selIds[id]; });
+  save(); renderAll();
+  showUndoToast(removed);
+}
+
+/* ---------- Confirm sheet (asked before any delete) ---------- */
+var confirmCb = null;
+function openConfirm(title, detail, okLabel, cb) {
+  $('confirmTitle').textContent = title;
+  $('confirmDetail').textContent = detail || '';
+  $('confirmOk').textContent = okLabel || 'Delete';
+  confirmCb = cb;
+  $('confirmSheet').classList.remove('hidden');
+}
+function closeConfirm() { $('confirmSheet').classList.add('hidden'); confirmCb = null; }
+
+/* ---------- Select mode: tap rows or drag across them, delete together ---------- */
+var selMode = false, selIds = {}, dragSel = null, lastFilteredIds = [];
+function setSelMode(on) {
+  selMode = on;
+  if (!on) { selIds = {}; dragSel = null; }
+  $('selBar').classList.toggle('hidden', !on);
+  $('selectModeBtn').classList.toggle('hidden', on);
+  renderTxns();
+}
+function updateSelBar() {
+  var n = Object.keys(selIds).length;
+  $('selCount').textContent = n + ' selected';
+  $('selDeleteBtn').textContent = n ? 'Delete (' + n + ')' : 'Delete';
+}
+function applySel(row, on) {
+  var id = row.dataset.tid;
+  if (!id) return;
+  if (on) selIds[id] = 1; else delete selIds[id];
+  row.classList.toggle('selected', !!on);
+  updateSelBar();
+}
+function startDragSelect(row, e) {
+  if (!selMode || !row.dataset.tid) return;
+  e.preventDefault();
+  dragSel = { mode: !selIds[row.dataset.tid] };
+  applySel(row, dragSel.mode);
+}
+document.addEventListener('pointermove', function (e) {
+  if (!dragSel) return;
+  var el = document.elementFromPoint(e.clientX, e.clientY);
+  var row = el && el.closest ? el.closest('.txn') : null;
+  if (row && row.closest && row.closest('#txnList')) applySel(row, dragSel.mode);
+});
+document.addEventListener('pointerup', function () { dragSel = null; });
+document.addEventListener('pointercancel', function () { dragSel = null; });
 function weekLabel(startISO, endISO) {
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var s = new Date(startISO + 'T12:00:00'), e = new Date(endISO + 'T12:00:00');
@@ -185,8 +253,14 @@ function renderTxns() {
   var list = state.txns.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; }).filter(function (t) {
     return (!q || (t.merchant + ' ' + (t.note || '')).toLowerCase().indexOf(q) >= 0) && (!fs || t.source === fs) && (!fc || t.category === fc);
   });
+  lastFilteredIds = list.map(function (t) { return t.id; });
+  var existing = {}; state.txns.forEach(function (t) { existing[t.id] = 1; });
+  Object.keys(selIds).forEach(function (id) { if (!existing[id]) delete selIds[id]; });
   $('txnList').innerHTML = list.length ? list.map(function (t) { return txnRow(t, false); }).join('') : '<p class="hint">No transactions match.</p>';
+  $('txnList').classList.toggle('selecting', selMode);
+  if (selMode) $('txnList').querySelectorAll('.txn').forEach(function (row) { if (selIds[row.dataset.tid]) row.classList.add('selected'); });
   bindTxnControls($('txnList'));
+  updateSelBar();
 }
 
 /* ---------- Recurring expenses: file themselves on their due date ---------- */
@@ -247,8 +321,12 @@ function renderRecurring() {
   });
   $('recList').querySelectorAll('[data-rec-del]').forEach(function (b) {
     b.addEventListener('click', function () {
-      state.recurring = state.recurring.filter(function (x) { return x.id !== b.dataset.recDel; });
-      save(); renderAll();
+      var r = state.recurring.filter(function (x) { return x.id === b.dataset.recDel; })[0];
+      if (!r) return;
+      openConfirm('Delete this recurring expense?', r.name + ' · ' + fmt(r.cents) + ' · ' + (FREQ_LABEL[r.freq] || r.freq), 'Delete', function () {
+        state.recurring = state.recurring.filter(function (x) { return x.id !== b.dataset.recDel; });
+        save(); renderAll();
+      });
     });
   });
 }
@@ -333,6 +411,17 @@ $('manualForm').addEventListener('submit', function (e) {
 $('searchBox').addEventListener('input', renderTxns);
 $('filterSource').addEventListener('change', renderTxns);
 $('filterCat').addEventListener('change', renderTxns);
+$('selectModeBtn').addEventListener('click', function () { setSelMode(true); });
+$('selCancelBtn').addEventListener('click', function () { setSelMode(false); });
+$('selAllBtn').addEventListener('click', function () { lastFilteredIds.forEach(function (id) { selIds[id] = 1; }); renderTxns(); });
+$('selDeleteBtn').addEventListener('click', function () {
+  var ids = Object.keys(selIds);
+  if (!ids.length) return;
+  openConfirm('Delete ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') + '?', 'They will be removed from your list and your totals.', 'Delete', function () { deleteTxns(ids); setSelMode(false); });
+});
+$('confirmCancel').addEventListener('click', closeConfirm);
+$('confirmOk').addEventListener('click', function () { var cb = confirmCb; closeConfirm(); if (cb) cb(); });
+$('confirmSheet').addEventListener('click', function (e) { if (e.target === $('confirmSheet')) closeConfirm(); });
 
 /* ---------- Direct Gmail sync ----------
    The app talks to Google directly from this phone: Google Identity Services
