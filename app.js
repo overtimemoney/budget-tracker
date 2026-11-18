@@ -101,33 +101,27 @@ function txnRow(t, compact) {
   var sign = t.direction === 'in' ? '+' : '−';
   var cls = t.category === 'Transfer' ? 'transfer' : (t.direction === 'in' ? 'in' : 'out');
   return '<div class="txn ' + cls + '" data-tid="' + t.id + '">' +
-    (compact ? '' : '<span class="selBox"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>') +
     '<div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
     '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
     '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
-    (compact ? '' : '<select class="catSel" data-id="' + t.id + '">' + P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><button class="delBtn" data-id="' + t.id + '" aria-label="Delete"><svg width="14" height="14" xmlns="http://www.w3.org/2000/svg" class="ic delIc" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg></button>') +
     '</div>';
 }
-function bindTxnControls(root) {
-  root.querySelectorAll('.catSel').forEach(function (sel) {
-    sel.addEventListener('change', function () {
-      var t = state.txns.filter(function (x) { return x.id === sel.dataset.id; })[0];
-      if (t) { t.category = sel.value; save(); renderAll(); }
-    });
-  });
-  root.querySelectorAll('.delBtn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (selMode) return;
-      var t = state.txns.filter(function (x) { return x.id === btn.dataset.id; })[0];
-      if (!t) return;
-      openConfirm('Delete this item?', t.merchant + ' · ' + (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date, 'Delete', function () { deleteTxns([t.id]); });
-    });
-  });
-  if (selMode && root.id === 'txnList') {
-    root.querySelectorAll('.txn').forEach(function (row) {
-      row.addEventListener('pointerdown', function (e) { startDragSelect(row, e); });
-    });
-  }
+/* ---------- Transaction card: tap any row to act on it ---------- */
+var tsId = null;
+function findTxn(id) { return state.txns.filter(function (x) { return x.id === id; })[0] || null; }
+function openTxnSheet(id) {
+  var t = findTxn(id);
+  if (!t) return;
+  tsId = id;
+  $('tsMerchant').textContent = t.merchant;
+  $('tsDetail').textContent = (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date + ' · ' + t.source + (t.note ? ' · ' + t.note : '');
+  $('tsCat').innerHTML = P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('');
+  $('txnSheet').classList.remove('hidden');
+}
+function closeTxnSheet() { $('txnSheet').classList.add('hidden'); tsId = null; }
+function onRowTap(e) {
+  var row = e.target.closest ? e.target.closest('.txn') : null;
+  if (row && row.dataset.tid) openTxnSheet(row.dataset.tid);
 }
 
 /* ---------- Undo toast: a delete is recoverable for 10 seconds ---------- */
@@ -159,7 +153,6 @@ function deleteTxns(ids) {
   var removed = [];
   state.txns = state.txns.filter(function (x, i) { if (ids.indexOf(x.id) >= 0) { removed.push({ txn: x, idx: i }); return false; } return true; });
   if (!removed.length) return;
-  ids.forEach(function (id) { delete selIds[id]; });
   save(); renderAll();
   showUndoToast(removed);
 }
@@ -175,42 +168,6 @@ function openConfirm(title, detail, okLabel, cb) {
 }
 function closeConfirm() { $('confirmSheet').classList.add('hidden'); confirmCb = null; }
 
-/* ---------- Select mode: tap rows or drag across them, delete together ---------- */
-var selMode = false, selIds = {}, dragSel = null, lastFilteredIds = [];
-function setSelMode(on) {
-  selMode = on;
-  if (!on) { selIds = {}; dragSel = null; }
-  $('selBar').classList.toggle('hidden', !on);
-  $('selectModeBtn').classList.toggle('hidden', on);
-  renderTxns();
-}
-function updateSelBar() {
-  var n = Object.keys(selIds).length;
-  $('selCount').textContent = n + ' selected';
-  $('selDeleteBtn').textContent = n ? 'Delete (' + n + ')' : 'Delete';
-  $('selOmitBtn').textContent = n ? 'Omit (' + n + ')' : 'Omit';
-}
-function applySel(row, on) {
-  var id = row.dataset.tid;
-  if (!id) return;
-  if (on) selIds[id] = 1; else delete selIds[id];
-  row.classList.toggle('selected', !!on);
-  updateSelBar();
-}
-function startDragSelect(row, e) {
-  if (!selMode || !row.dataset.tid) return;
-  e.preventDefault();
-  dragSel = { mode: !selIds[row.dataset.tid] };
-  applySel(row, dragSel.mode);
-}
-document.addEventListener('pointermove', function (e) {
-  if (!dragSel) return;
-  var el = document.elementFromPoint(e.clientX, e.clientY);
-  var row = el && el.closest ? el.closest('.txn') : null;
-  if (row && row.closest && row.closest('#txnList')) applySel(row, dragSel.mode);
-});
-document.addEventListener('pointerup', function () { dragSel = null; });
-document.addEventListener('pointercancel', function () { dragSel = null; });
 function weekLabel(startISO, endISO) {
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var s = new Date(startISO + 'T12:00:00'), e = new Date(endISO + 'T12:00:00');
@@ -271,14 +228,7 @@ function renderTxns() {
   var list = state.txns.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; }).filter(function (t) {
     return !t.omitted && (!q || (t.merchant + ' ' + (t.note || '')).toLowerCase().indexOf(q) >= 0) && (!fs || t.source === fs) && (!fc || t.category === fc);
   });
-  lastFilteredIds = list.map(function (t) { return t.id; });
-  var existing = {}; state.txns.forEach(function (t) { existing[t.id] = 1; });
-  Object.keys(selIds).forEach(function (id) { if (!existing[id]) delete selIds[id]; });
   $('txnList').innerHTML = list.length ? list.map(function (t) { return txnRow(t, false); }).join('') : '<p class="hint">No transactions match.</p>';
-  $('txnList').classList.toggle('selecting', selMode);
-  if (selMode) $('txnList').querySelectorAll('.txn').forEach(function (row) { if (selIds[row.dataset.tid]) row.classList.add('selected'); });
-  bindTxnControls($('txnList'));
-  updateSelBar();
 }
 
 /* ---------- Recurring expenses: file themselves on their due date ---------- */
@@ -459,7 +409,7 @@ function renderRules() {
   box.innerHTML = rules.length ? rules.map(function (r) {
     var n = state.txns.filter(function (t) { return t.omitted && ruleMatches(r, t); }).length;
     return '<div class="txn out"><div class="txnMain"><strong>' + esc(r.merchant) + '</strong><span class="meta">' + esc(r.source) + ' · omitting ' + n + ' now</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
-  }).join('') : '<p class="hint">No rules yet — select a transaction, tap Omit, then “Omit all similar”.</p>';
+  }).join('') : '<p class="hint">No rules yet — tap a transaction → Omit → “Omit all similar”.</p>';
 }
 function migrateOmitFix() {
   if (state.omitFixV22) return;
@@ -535,18 +485,28 @@ $('manualForm').addEventListener('submit', function (e) {
 $('searchBox').addEventListener('input', renderTxns);
 $('filterSource').addEventListener('change', renderTxns);
 $('filterCat').addEventListener('change', renderTxns);
-$('selectModeBtn').addEventListener('click', function () { setSelMode(true); });
-$('selCancelBtn').addEventListener('click', function () { setSelMode(false); });
-$('selAllBtn').addEventListener('click', function () { lastFilteredIds.forEach(function (id) { selIds[id] = 1; }); renderTxns(); });
-$('selDeleteBtn').addEventListener('click', function () {
-  var ids = Object.keys(selIds);
-  if (!ids.length) return;
-  openConfirm('Delete ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') + '?', 'They will be removed from your list and your totals.', 'Delete', function () { deleteTxns(ids); setSelMode(false); });
+$('txnList').addEventListener('click', onRowTap);
+$('recentList').addEventListener('click', onRowTap);
+$('tsCloseBtn').addEventListener('click', closeTxnSheet);
+$('txnSheet').addEventListener('click', function (e) { if (e.target === $('txnSheet')) closeTxnSheet(); });
+$('tsCat').addEventListener('change', function () {
+  var t = tsId ? findTxn(tsId) : null;
+  if (t) { t.category = $('tsCat').value; save(); renderAll(); }
+});
+$('tsDeleteBtn').addEventListener('click', function () {
+  var t = tsId ? findTxn(tsId) : null;
+  if (!t) { closeTxnSheet(); return; }
+  var id = t.id;
+  closeTxnSheet();
+  openConfirm('Delete this item?', t.merchant + ' · ' + (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date, 'Delete', function () { deleteTxns([id]); });
+});
+$('tsOmitBtn').addEventListener('click', function () {
+  var id = tsId;
+  closeTxnSheet();
+  if (id) openOmitSheet([id]);
 });
 var omitSheetIds = null;
-$('selOmitBtn').addEventListener('click', function () {
-  var ids = Object.keys(selIds);
-  if (!ids.length) return;
+function openOmitSheet(ids) {
   omitSheetIds = ids;
   var keys = {}, names = [];
   state.txns.forEach(function (t) {
@@ -557,12 +517,12 @@ $('selOmitBtn').addEventListener('click', function () {
   $('omitTitle').textContent = 'Omit ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') + '?';
   $('omitDetail').textContent = '“Omit all similar” creates a rule for ' + names.join(' and ') + ' — it also omits matching items already in your list, and every future import with the same name and source.';
   $('omitSheet').classList.remove('hidden');
-});
+}
 function closeOmitSheet() { $('omitSheet').classList.add('hidden'); omitSheetIds = null; }
 $('omitCancelBtn').addEventListener('click', closeOmitSheet);
 $('omitSheet').addEventListener('click', function (e) { if (e.target === $('omitSheet')) closeOmitSheet(); });
-$('omitJustBtn').addEventListener('click', function () { var ids = omitSheetIds; closeOmitSheet(); if (ids) { omitTxns(ids); setSelMode(false); } });
-$('omitRuleBtn').addEventListener('click', function () { var ids = omitSheetIds; closeOmitSheet(); if (ids) { omitWithRules(ids); setSelMode(false); } });
+$('omitJustBtn').addEventListener('click', function () { var ids = omitSheetIds; closeOmitSheet(); if (ids) omitTxns(ids); });
+$('omitRuleBtn').addEventListener('click', function () { var ids = omitSheetIds; closeOmitSheet(); if (ids) omitWithRules(ids); });
 $('confirmCancel').addEventListener('click', closeConfirm);
 $('confirmOk').addEventListener('click', function () { var cb = confirmCb; closeConfirm(); if (cb) cb(); });
 $('confirmSheet').addEventListener('click', function (e) { if (e.target === $('confirmSheet')) closeConfirm(); });
