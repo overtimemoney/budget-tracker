@@ -1357,8 +1357,15 @@ function renderHome() {
   var days = [], cur = new Date(range.start + 'T12:00:00');
   var end = new Date(range.end + 'T12:00:00'), max = 1;
   while (cur <= end) { var iso = P.todayISO(cur); var v = t.byDay[iso] || 0; if (v > max) max = v; days.push({ iso: iso, v: v, dow: cur.toLocaleDateString('en-US', { weekday: 'narrow' }), dom: cur.getDate() }); cur.setDate(cur.getDate() + 1); }
-  $('dayBars').innerHTML = days.map(function (d) {
-    return '<div class="barCol' + (d.iso === barSel ? ' sel' : '') + '" data-iso="' + d.iso + '"><div class="bar" style="height:' + Math.max(2, Math.round(d.v / max * 64)) + 'px" title="' + d.iso + ' ' + fmt(d.v) + '"></div><span>' + (period === 'week' ? d.dow : d.dom) + '</span></div>';
+  $('dayBars').innerHTML = days.map(function (d, i) {
+    // Month view: 30 day-numbers can't each fit a ~12px-wide column — the
+    // digits collide. Label only the 1st, every 5th day, and the last day;
+    // unlabeled days keep an nbsp span so all bars share one baseline. Every
+    // bar stays tappable and the readout names the exact day tapped.
+    var lab;
+    if (period === 'week') lab = d.dow;
+    else lab = (d.dom === 1 || d.dom % 5 === 0 || i === days.length - 1) ? d.dom : '&nbsp;';
+    return '<div class="barCol' + (d.iso === barSel ? ' sel' : '') + '" data-iso="' + d.iso + '"><div class="bar" style="height:' + Math.max(2, Math.round(d.v / max * 64)) + 'px" title="' + d.iso + ' ' + fmt(d.v) + '"></div><span>' + lab + '</span></div>';
   }).join('');
   var ro = $('barReadout'), selDay = null;
   days.forEach(function (d) { if (d.iso === barSel) selDay = d; });
