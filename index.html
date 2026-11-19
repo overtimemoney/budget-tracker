@@ -824,6 +824,25 @@ function detectSource(text) {
   return 'Other';
 }
 
+/* The Venmo payment note (what the payment was for) sits in the email body on
+   its own line, right before the "See transaction" link and after the amount
+   (which may be split across lines: "$" / "28" / ". 00"). Walk up from that
+   link, skipping amount debris; reaching the "You paid / paid you" header
+   line means there is no note. */
+function venmoNote(text) {
+  var idx = text.search(/see transaction/i);
+  if (idx < 0) return '';
+  var lines = text.slice(0, idx).split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+  for (var i = lines.length - 1; i >= 0; i--) {
+    var L = lines[i];
+    if (/^\$$/.test(L) || /^[\d,]+$/.test(L) || /^\.\s?\d{2}$/.test(L) || /^\$[\d,]+\.\d{2}$/.test(L)) continue;
+    if (/you paid|paid you|sent you|charged you/i.test(L)) return '';
+    if (/^venmo$/i.test(L)) continue;
+    return cleanMerchant(L.replace(/\[|\]/g, ''));
+  }
+  return '';
+}
+
 /* Parse ONE notification / text line into a txn draft, or null. */
 function parseNotification(line, fallbackDate) {
   var text = String(line || '').trim();
@@ -862,22 +881,23 @@ function parseNotification(line, fallbackDate) {
   }
 
   // Venmo: "X paid you $25.00 for ..." / "You paid X $25.00"
-  if ((m = text.match(/^(.*?)\s+paid you\b/i)) && source === 'Venmo' || /paid you/i.test(text)) {
-    merchant = cleanMerchant((text.match(/^(.*?)\s+paid you\b/i) || [])[1] || 'Venmo');
+  if ((m = text.match(/^(.+?)\s+paid you\b/im)) && source === 'Venmo' || /paid you/i.test(text)) {
+    merchant = cleanMerchant((text.match(/^(.+?)\s+paid you\b/im) || [])[1] || 'Venmo');
     direction = 'in'; source = 'Venmo';
     var noteM = text.match(/paid you[^$]*\$[\d,.]+\s*(?:for\s+)?(.+)$/i);
-    var note = noteM ? cleanMerchant(noteM[1].replace(/\s+on venmo$/i, '')) : '';
+    var note = venmoNote(text) || (noteM ? cleanMerchant(noteM[1].replace(/\s+on venmo$/i, '')) : '');
+    if (/^(on|via) venmo$/i.test(note)) note = '';
     return mk(date, cents, direction, merchant, source, note);
   }
   if ((m = text.match(/you (?:paid|sent|charged)\s+(.*?)\s+\$/i))) {
     merchant = cleanMerchant(m[1]); direction = 'out'; if (/venmo/i.test(text)) source = 'Venmo';
-    return mk(date, cents, direction, merchant, source, '');
+    return mk(date, cents, direction, merchant, source, source === 'Venmo' ? venmoNote(text) : '');
   }
   // "Sebastien Torres paid $13.00 to your Venmo account." — money in from a
   // person (NOT a bank transfer, despite the follow-on sentence mentioning
   // transferring it to a bank).
   if (source === 'Venmo' && (m = text.match(/^(.+?) paid \$[\d,.]+ to your Venmo account/im))) {
-    return mk(date, cents, 'in', cleanMerchant(m[1]), 'Venmo', '');
+    return mk(date, cents, 'in', cleanMerchant(m[1]), 'Venmo', venmoNote(text));
   }
   // Venmo cash-out to his own bank account: moving his own money, not a
   // payment to a person. Runs AFTER the person-payment branches above (so an
@@ -1048,9 +1068,12 @@ function parseGmailAlert(from, subject, dateISO) {
     return null;
   }
   if (sender.indexOf('venmo') >= 0) {
-    if ((m = subj.match(/^You paid (.+?) \$([\d,]+\.\d{2})/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'out', cleanMerchant(m[1]), 'Venmo', '');
-    if ((m = subj.match(/^(.+?) paid \$([\d,]+\.\d{2}) to your Venmo account/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'in', cleanMerchant(m[1]), 'Venmo', '');
-    if ((m = subj.match(/^(.+?) paid (?:you )?\$([\d,]+\.\d{2})(?:\s+for\s+(.+))?$/))) return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'in', cleanMerchant(m[1]), 'Venmo', m[3] ? cleanMerchant(m[3]) : '');
+    // Person payments: return null so the sync fetches the full email and
+    // parseNotification can read the payment note (the item line — what the
+    // payment was for) from the body. The subject alone has no note.
+    if (/^You paid .+? \$[\d,]+\.\d{2}/.test(subj)) return null;
+    if (/^.+? paid \$[\d,]+\.\d{2} to your Venmo account/.test(subj)) return null;
+    if (/^.+? paid (?:you )?\$[\d,]+\.\d{2}/.test(subj)) return null;
     if (/bank/i.test(subj) && (m = subj.match(/transfer\w*\s+(?:of\s+)?\$([\d,]+\.\d{2})/i))) return mk(date, Math.round(parseFloat(m[1].replace(/,/g, '')) * 100), 'out', 'Bank transfer', 'Venmo', '');
     return null;
   }
