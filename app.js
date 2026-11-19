@@ -646,7 +646,21 @@ function syncRuleParamVisibility() {
   $('ruleCatWrap').classList.toggle('hidden', !(a === 'category' || a === 'offset'));
   $('ruleNameWrap').classList.toggle('hidden', a !== 'rename');
 }
+function ruleErr(msg, el) {
+  var e = $('ruleError');
+  e.textContent = msg;
+  e.classList.remove('hidden');
+  if (el) el.classList.add('fieldBad');
+}
+function clearRuleErr() {
+  $('ruleError').classList.add('hidden');
+  ['ruleMerchant', 'ruleAmt', 'ruleName'].forEach(function (id) { $(id).classList.remove('fieldBad'); });
+}
+['ruleMerchant', 'ruleAmt', 'ruleName'].forEach(function (id) { $(id).addEventListener('input', clearRuleErr); });
+$('ruleAmtOp').addEventListener('change', function () { $('ruleAmtStar').hidden = !$('ruleAmtOp').value; clearRuleErr(); });
 function openRuleEditor(prefill) {
+  clearRuleErr();
+  $('ruleAmtStar').hidden = true;
   $('ruleMerchant').value = prefill && prefill.merchant || '';
   $('ruleSource').value = prefill && prefill.source || '';
   $('ruleDir').value = prefill && prefill.direction || '';
@@ -671,16 +685,16 @@ $('tsRuleBtn').addEventListener('click', function () {
 });
 $('ruleSaveBtn').addEventListener('click', function () {
   var kw = $('ruleMerchant').value.trim();
-  if (!kw) { showMsgToast('Give the rule a merchant name to match.'); return; }
+  if (!kw) { ruleErr('Merchant name is required — the rule matches transactions by that name.', $('ruleMerchant')); return; }
   var action = $('ruleAction').value;
   var amtOp = $('ruleAmtOp').value || null, amtCents = null;
   if (amtOp) {
     var v = parseFloat($('ruleAmt').value);
-    if (isNaN(v) || v < 0) { showMsgToast('Enter an amount for the rule, or set Amount to “Any amount”.'); return; }
+    if (isNaN(v) || v < 0) { ruleErr('Enter an amount, or set Amount to “Any amount”.', $('ruleAmt')); return; }
     amtCents = Math.round(v * 100);
   }
   var newName = action === 'rename' ? $('ruleName').value.trim() : null;
-  if (action === 'rename' && !newName) { showMsgToast('Enter the new name for the rule.'); return; }
+  if (action === 'rename' && !newName) { ruleErr('Enter the new name for the rule.', $('ruleName')); return; }
   var rule = { id: uid(), merchant: kw, contains: true, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: (action === 'category' || action === 'offset') ? $('ruleCat').value : null, newName: newName };
   state.rules.push(rule);
   var n = 0;
