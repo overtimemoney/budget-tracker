@@ -932,7 +932,16 @@ function mk(date, cents, direction, merchant, source, note) {
 
 /* Bulk paste: one notification per line. Reports parsed AND skipped — never silent. */
 function parseBulk(text, fallbackDate) {
-  var lines = String(text || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+  var whole = String(text || '').trim();
+  // A pasted FULL email (a Venmo receipt with its "See transaction" link, or a
+  // Gusto payday email with its "Check amount") is ONE transaction spread over
+  // many lines — line-by-line parsing would shred it and lose the note, the
+  // date, and the source, which all live on their own lines. Parse it whole.
+  if (whole.indexOf('\n') >= 0 && (/see transaction/i.test(whole) || /check amount/i.test(whole))) {
+    var one = parseNotification(whole, fallbackDate);
+    if (one) return { txns: [one], skipped: [], totalLines: 1 };
+  }
+  var lines = whole.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
   var out = [], skipped = [];
   lines.forEach(function (l) { var t = parseNotification(l, fallbackDate); if (t) out.push(t); else skipped.push(l); });
   return { txns: out, skipped: skipped, totalLines: lines.length };
