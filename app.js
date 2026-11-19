@@ -443,7 +443,7 @@ function renderRules() {
   if (!box) return;
   var rules = state.rules || [];
   box.innerHTML = rules.length ? rules.map(function (r) {
-    return '<div class="txn ' + ((r.action || 'omit') === 'offset' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(r.merchant) + '</strong><span class="meta">' + esc(ruleSummary(r)) + '</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
+    return '<div class="txn ' + ((r.action || 'omit') === 'offset' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(r.merchant || 'Any name') + '</strong><span class="meta">' + esc(ruleSummary(r)) + '</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
   }).join('') : '<p class="hint">No rules yet — tap a transaction → “Make a rule…”, or use New rule below.</p>';
 }
 function migrateOmitFix() {
@@ -485,7 +485,7 @@ function ruleMatches(rule, t) {
     if (rule.amountOp === 'gte' && a < rule.amountCents) return false;
   }
   var kw = normMerchant(rule.merchant || '');
-  if (!kw) return false;
+  if (!kw) return true; // no name set: the rule matches on its other criteria alone
   var name = normMerchant(t.origMerchant || t.merchant);
   return rule.contains ? name.indexOf(kw) >= 0 : name === kw;
 }
@@ -645,6 +645,14 @@ function syncRuleParamVisibility() {
   var a = $('ruleAction').value;
   $('ruleCatWrap').classList.toggle('hidden', !(a === 'category' || a === 'offset'));
   $('ruleNameWrap').classList.toggle('hidden', a !== 'rename');
+  var sel = $('ruleCat'), first = sel.options[0];
+  if (a === 'offset' && (!first || first.value !== '')) {
+    var o = document.createElement('option');
+    o.value = ''; o.textContent = 'Total spending (no category)';
+    sel.insertBefore(o, sel.firstChild);
+    sel.value = '';
+  }
+  if (a === 'category' && first && first.value === '') { sel.removeChild(first); if (!sel.value) sel.value = 'Other'; }
 }
 function ruleErr(msg, el) {
   var e = $('ruleError');
@@ -685,7 +693,6 @@ $('tsRuleBtn').addEventListener('click', function () {
 });
 $('ruleSaveBtn').addEventListener('click', function () {
   var kw = $('ruleMerchant').value.trim();
-  if (!kw) { ruleErr('Merchant name is required — the rule matches transactions by that name.', $('ruleMerchant')); return; }
   var action = $('ruleAction').value;
   var amtOp = $('ruleAmtOp').value || null, amtCents = null;
   if (amtOp) {
@@ -693,9 +700,10 @@ $('ruleSaveBtn').addEventListener('click', function () {
     if (isNaN(v) || v < 0) { ruleErr('Enter an amount, or set Amount to “Any amount”.', $('ruleAmt')); return; }
     amtCents = Math.round(v * 100);
   }
+  if (!kw && !$('ruleSource').value && !$('ruleDir').value && !amtOp) { ruleErr('Set at least one thing for the rule to match: a merchant name, a source, a direction, or an amount.', $('ruleMerchant')); return; }
   var newName = action === 'rename' ? $('ruleName').value.trim() : null;
   if (action === 'rename' && !newName) { ruleErr('Enter the new name for the rule.', $('ruleName')); return; }
-  var rule = { id: uid(), merchant: kw, contains: true, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: (action === 'category' || action === 'offset') ? $('ruleCat').value : null, newName: newName };
+  var rule = { id: uid(), merchant: kw, contains: true, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: action === 'category' ? $('ruleCat').value : action === 'offset' ? ($('ruleCat').value || null) : null, newName: newName };
   state.rules.push(rule);
   var n = 0;
   state.txns.forEach(function (t) {

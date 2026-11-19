@@ -672,7 +672,8 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
 <div id="txnSheet" class="sheet hidden"><div class="sheetCard"><h3 id="tsMerchant">Transaction</h3><p id="tsDetail" class="hint"></p><label class="tsLabel" for="tsCat">Category</label><select id="tsCat"></select><div class="sheetBtns col"><button id="tsOmitBtn" type="button">Omit…</button><button id="tsOffsetBtn" class="ghost" type="button">Offset spending…</button><button id="tsRuleBtn" class="ghost" type="button">Make a rule…</button><button id="tsDeleteBtn" class="danger" type="button">Delete</button><button id="tsCloseBtn" class="ghost" type="button">Close</button></div></div></div>
 <div id="offsetSheet" class="sheet hidden"><div class="sheetCard"><h3>Offset spending?</h3><p id="offsetDetail" class="hint"></p><div class="sheetBtns col"><button id="offsetRuleBtn" type="button">Offset all similar — create rule</button><button id="offsetJustBtn" class="ghost" type="button">Just this one</button><button id="offsetCancelBtn" class="ghost" type="button">Cancel</button></div></div></div>
 <div id="ruleSheet" class="sheet hidden"><div class="sheetCard"><h3>New rule</h3>
-<label class="tsLabel" for="ruleMerchant">Merchant name contains <span class="red">*</span></label><input id="ruleMerchant" type="text" placeholder="e.g. Sebastien">
+<p class="hint">Fill in at least one — a rule matches transactions that fit everything you set.</p>
+<label class="tsLabel" for="ruleMerchant">Merchant name contains</label><input id="ruleMerchant" type="text" placeholder="e.g. Sebastien">
 <label class="tsLabel" for="ruleSource">Source</label><select id="ruleSource"><option value="">Any source</option><option>BofA</option><option>Capital One</option><option>Venmo</option><option>Gusto</option><option>Manual</option><option>Recurring</option><option>Other</option></select>
 <label class="tsLabel" for="ruleDir">Direction</label><select id="ruleDir"><option value="">Any direction</option><option value="in">Money in</option><option value="out">Money out</option></select>
 <label class="tsLabel" for="ruleAmtOp">Amount <span class="red" id="ruleAmtStar" hidden>*</span></label><div class="row2"><select id="ruleAmtOp"><option value="">Any amount</option><option value="eq">Exactly</option><option value="lte">At most</option><option value="gte">At least</option></select><input id="ruleAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div>
@@ -1526,7 +1527,7 @@ function renderRules() {
   if (!box) return;
   var rules = state.rules || [];
   box.innerHTML = rules.length ? rules.map(function (r) {
-    return '<div class="txn ' + ((r.action || 'omit') === 'offset' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(r.merchant) + '</strong><span class="meta">' + esc(ruleSummary(r)) + '</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
+    return '<div class="txn ' + ((r.action || 'omit') === 'offset' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(r.merchant || 'Any name') + '</strong><span class="meta">' + esc(ruleSummary(r)) + '</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
   }).join('') : '<p class="hint">No rules yet — tap a transaction → “Make a rule…”, or use New rule below.</p>';
 }
 function migrateOmitFix() {
@@ -1568,7 +1569,7 @@ function ruleMatches(rule, t) {
     if (rule.amountOp === 'gte' && a < rule.amountCents) return false;
   }
   var kw = normMerchant(rule.merchant || '');
-  if (!kw) return false;
+  if (!kw) return true; // no name set: the rule matches on its other criteria alone
   var name = normMerchant(t.origMerchant || t.merchant);
   return rule.contains ? name.indexOf(kw) >= 0 : name === kw;
 }
@@ -1728,6 +1729,14 @@ function syncRuleParamVisibility() {
   var a = $('ruleAction').value;
   $('ruleCatWrap').classList.toggle('hidden', !(a === 'category' || a === 'offset'));
   $('ruleNameWrap').classList.toggle('hidden', a !== 'rename');
+  var sel = $('ruleCat'), first = sel.options[0];
+  if (a === 'offset' && (!first || first.value !== '')) {
+    var o = document.createElement('option');
+    o.value = ''; o.textContent = 'Total spending (no category)';
+    sel.insertBefore(o, sel.firstChild);
+    sel.value = '';
+  }
+  if (a === 'category' && first && first.value === '') { sel.removeChild(first); if (!sel.value) sel.value = 'Other'; }
 }
 function ruleErr(msg, el) {
   var e = $('ruleError');
@@ -1768,7 +1777,6 @@ $('tsRuleBtn').addEventListener('click', function () {
 });
 $('ruleSaveBtn').addEventListener('click', function () {
   var kw = $('ruleMerchant').value.trim();
-  if (!kw) { ruleErr('Merchant name is required — the rule matches transactions by that name.', $('ruleMerchant')); return; }
   var action = $('ruleAction').value;
   var amtOp = $('ruleAmtOp').value || null, amtCents = null;
   if (amtOp) {
@@ -1776,9 +1784,10 @@ $('ruleSaveBtn').addEventListener('click', function () {
     if (isNaN(v) || v < 0) { ruleErr('Enter an amount, or set Amount to “Any amount”.', $('ruleAmt')); return; }
     amtCents = Math.round(v * 100);
   }
+  if (!kw && !$('ruleSource').value && !$('ruleDir').value && !amtOp) { ruleErr('Set at least one thing for the rule to match: a merchant name, a source, a direction, or an amount.', $('ruleMerchant')); return; }
   var newName = action === 'rename' ? $('ruleName').value.trim() : null;
   if (action === 'rename' && !newName) { ruleErr('Enter the new name for the rule.', $('ruleName')); return; }
-  var rule = { id: uid(), merchant: kw, contains: true, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: (action === 'category' || action === 'offset') ? $('ruleCat').value : null, newName: newName };
+  var rule = { id: uid(), merchant: kw, contains: true, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: action === 'category' ? $('ruleCat').value : action === 'offset' ? ($('ruleCat').value || null) : null, newName: newName };
   state.rules.push(rule);
   var n = 0;
   state.txns.forEach(function (t) {
