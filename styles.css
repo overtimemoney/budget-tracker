@@ -28,7 +28,9 @@
   --seg-active:#2e3138; --nav-bg:rgba(0,0,0,.92);
   --focus-border:#ffffff; --focus-ring:rgba(255,255,255,.22); --dashed:#3a3d42;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 html,body{overflow-x:hidden}
 body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif;
   background:var(--bg);color:var(--body);padding:0 20px 108px;max-width:560px;margin:0 auto;
