@@ -128,8 +128,10 @@ function onRowTap(e) {
 }
 
 /* ---------- Undo toast: a delete is recoverable for 10 seconds ---------- */
-var undoSlot = null, undoTimer = null;
+var undoSlot = null, undoTimer = null, msgToastTimer = null;
 function showUndoToast(removed) {
+  if (msgToastTimer) { clearTimeout(msgToastTimer); msgToastTimer = null; }
+  $('toastUndo').classList.remove('hidden');
   undoSlot = { items: removed };
   $('toastMsg').textContent = removed.length === 1
     ? 'Deleted ' + removed[0].txn.merchant + ' ' + (removed[0].txn.direction === 'in' ? '+' : '−') + fmt(removed[0].txn.cents)
@@ -151,6 +153,18 @@ function hideUndoToast() {
   var t = $('toast'); if (t) t.classList.add('hidden');
   undoSlot = null;
   if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+}
+/* Plain message toast (no Undo button) — used for sync feedback. */
+function showMsgToast(msg, ms) {
+  if (undoSlot) return; // never clobber a delete-undo toast
+  $('toastMsg').textContent = msg;
+  $('toastUndo').classList.add('hidden');
+  $('toast').classList.remove('hidden');
+  if (msgToastTimer) clearTimeout(msgToastTimer);
+  msgToastTimer = setTimeout(function () {
+    msgToastTimer = null;
+    if (!undoSlot) { $('toast').classList.add('hidden'); $('toastUndo').classList.remove('hidden'); }
+  }, ms || 3500);
 }
 function deleteTxns(ids) {
   var removed = [];
@@ -842,8 +856,8 @@ function gmailBodyText(part) {
   return out;
 }
 function syncGmail(interactive) {
-  if (gmailSyncing) return Promise.resolve();
-  if (!gmailClientId()) { renderGmailStatus(); $('gmailResult').textContent = 'Paste your Google Client ID first — the one-time setup steps are right above it.'; return Promise.resolve(); }
+  if (gmailSyncing) return Promise.resolve({ busy: true });
+  if (!gmailClientId()) { renderGmailStatus(); $('gmailResult').textContent = 'Paste your Google Client ID first — the one-time setup steps are right above it.'; return Promise.resolve({ error: 'Gmail isn’t set up yet — open Settings → Gmail sync to connect it.' }); }
   gmailSyncing = true; $('gmailResult').textContent = 'Syncing with Gmail…';
   return gmailEnsureToken(interactive).then(function (token) {
     var last = gmailGet(GMAIL_LS.last, ''), since, d;
@@ -890,12 +904,14 @@ function syncGmail(interactive) {
         gmailSyncing = false;
         renderGmailStatus();
         $('gmailResult').textContent = 'Gmail sync done: added ' + res.added + ' new transaction' + (res.added === 1 ? '' : 's') + (res.dupes ? ', ' + res.dupes + ' already in the app' : '') + ', ignored ' + ignored + ' alert email' + (ignored === 1 ? '' : 's') + ' that weren’t completed payments.';
+        return { added: res.added, dupes: res.dupes, ignored: ignored };
       });
     });
   }).catch(function (e) {
     gmailSyncing = false;
     renderGmailStatus();
     $('gmailResult').textContent = interactive ? (e.message || 'Gmail sync failed.') : 'Gmail is connected, but Google needs a tap this time — open Settings → Gmail sync → Sync now.';
+    return { error: $('gmailResult').textContent };
   });
 }
 function maybeAutoSyncGmail() {
@@ -1027,8 +1043,39 @@ function reloadApp(btn) {
   });
   setTimeout(function () { if (btn) { btn.textContent = old; btn.disabled = false; } }, 4000);
 }
-$('reloadBtn').addEventListener('click', function () { reloadApp($('reloadBtn')); });
-$('reloadBtn2').addEventListener('click', function () { reloadApp($('reloadBtn2')); });
+/* ---------- Sync button: pull new transactions from Gmail, THEN reload the app code.
+   If Gmail isn't connected there's nothing to pull, so it just reloads. If the
+   sync fails in a way that needs Justin (sign-in closed, session expired), the
+   error is shown and the reload is skipped so he can act on it. ---------- */
+function syncAndReload(btn) {
+  var connected = gmailGet(GMAIL_LS.connected, '') === '1' && !!gmailClientId();
+  if (!connected) { reloadApp(btn); return; }
+  var oldHTML = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
+  var done = function (outcome) {
+    if (outcome && outcome.error) {
+      if (btn) { btn.disabled = false; btn.innerHTML = oldHTML; }
+      showMsgToast(outcome.error, 6000);
+      return;
+    }
+    var known = outcome && typeof outcome.added === 'number';
+    if (known) showMsgToast(outcome.added
+      ? 'Synced — ' + outcome.added + ' new transaction' + (outcome.added === 1 ? '' : 's') + '. Reloading the app…'
+      : 'Already up to date. Reloading the app…', 1600);
+    setTimeout(function () { reloadApp(btn); }, known ? 1100 : 0);
+  };
+  if (gmailSyncing) { // the on-open auto-sync is already running — wait for it, then reload
+    var waited = 0;
+    var iv = setInterval(function () {
+      waited += 300;
+      if (!gmailSyncing || waited >= 60000) { clearInterval(iv); done({}); }
+    }, 300);
+    return;
+  }
+  syncGmail(true).then(done, function () { done({}); });
+}
+$('reloadBtn').addEventListener('click', function () { syncAndReload($('reloadBtn')); });
+$('reloadBtn2').addEventListener('click', function () { syncAndReload($('reloadBtn2')); });
 
 /* ---------- Init ---------- */
 P.CATEGORIES.forEach(function (c) {
