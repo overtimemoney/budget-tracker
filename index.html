@@ -1305,8 +1305,6 @@ function renderHome() {
       var expected = Math.round(totalBudget * dayOfMonth / range.days);
       pace = 'Budget pace: ' + fmt(t.spent) + ' spent of ' + fmt(totalBudget) + ' budgeted · straight-line pace for today is ' + fmt(expected) + (t.spent <= expected ? ' — you’re on pace' : ' — ahead of pace');
     }
-  } else if (period === 'week') {
-    pace = 'Transfers (card payments, Venmo-to-bank) are listed but never counted as spending.';
   }
   $('paceLine').textContent = pace;
   // Daily bars
