@@ -219,6 +219,8 @@ button .ic{pointer-events:none}
 .sheetBtns{display:flex;gap:10px;margin-top:16px}
 .sheetBtns.col{flex-direction:column}
 .tsLabel{display:block;font-size:12.5px;font-weight:600;color:var(--faint);margin:12px 0 5px}
+.row2{display:flex;gap:8px}
+.row2>*{flex:1;min-width:0}
 #txnList .txn,#recentList .txn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .subHead{font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin:16px 0 6px}
 #rulesList .txn{align-items:center}
@@ -577,7 +579,8 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
       <p class="hint">The built-in rules above run on every import (Gmail sync, CSV, paste) before anything reaches your list. Anything they catch lands under Omitted transactions below, where you can restore it.</p>
       <h4 class="subHead">Your rules</h4>
       <div id="rulesList"></div>
-      <p class="hint">Deleting a rule stops future auto-omits. Items already omitted stay under Omitted transactions until you restore them.</p>
+      <button id="newRuleBtn" class="ghost small" type="button">New rule</button>
+      <p class="hint">Rules match by merchant name (keyword), source, direction, and amount — and can set a category, rename a transaction, omit it, or offset spending with it. They run automatically on new transactions and apply to matching ones already here. Deleting a rule stops it going forward; changes it already made stay until you undo them.</p>
     </div>
     <h3>Omitted transactions</h3>
     <div class="secBox">
@@ -663,7 +666,18 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
 
 <div id="confirmSheet" class="sheet hidden"><div class="sheetCard"><h3 id="confirmTitle">Delete this item?</h3><p id="confirmDetail" class="hint"></p><div class="sheetBtns"><button id="confirmCancel" class="ghost" type="button">Cancel</button><button id="confirmOk" class="danger" type="button">Delete</button></div></div></div>
 <div id="omitSheet" class="sheet hidden"><div class="sheetCard"><h3 id="omitTitle">Omit items?</h3><p id="omitDetail" class="hint"></p><div class="sheetBtns col"><button id="omitRuleBtn" type="button">Omit all similar — create rule</button><button id="omitJustBtn" class="ghost" type="button">Omit just these</button><button id="omitCancelBtn" class="ghost" type="button">Cancel</button></div></div></div>
-<div id="txnSheet" class="sheet hidden"><div class="sheetCard"><h3 id="tsMerchant">Transaction</h3><p id="tsDetail" class="hint"></p><label class="tsLabel" for="tsCat">Category</label><select id="tsCat"></select><div class="sheetBtns col"><button id="tsOmitBtn" type="button">Omit…</button><button id="tsDeleteBtn" class="danger" type="button">Delete</button><button id="tsCloseBtn" class="ghost" type="button">Close</button></div></div></div>
+<div id="txnSheet" class="sheet hidden"><div class="sheetCard"><h3 id="tsMerchant">Transaction</h3><p id="tsDetail" class="hint"></p><label class="tsLabel" for="tsCat">Category</label><select id="tsCat"></select><div class="sheetBtns col"><button id="tsOmitBtn" type="button">Omit…</button><button id="tsOffsetBtn" class="ghost" type="button">Offset spending…</button><button id="tsRuleBtn" class="ghost" type="button">Make a rule…</button><button id="tsDeleteBtn" class="danger" type="button">Delete</button><button id="tsCloseBtn" class="ghost" type="button">Close</button></div></div></div>
+<div id="offsetSheet" class="sheet hidden"><div class="sheetCard"><h3>Offset spending?</h3><p id="offsetDetail" class="hint"></p><div class="sheetBtns col"><button id="offsetRuleBtn" type="button">Offset all similar — create rule</button><button id="offsetJustBtn" class="ghost" type="button">Just this one</button><button id="offsetCancelBtn" class="ghost" type="button">Cancel</button></div></div></div>
+<div id="ruleSheet" class="sheet hidden"><div class="sheetCard"><h3>New rule</h3>
+<label class="tsLabel" for="ruleMerchant">Merchant name contains</label><input id="ruleMerchant" type="text" placeholder="e.g. Sebastien">
+<label class="tsLabel" for="ruleSource">Source</label><select id="ruleSource"><option value="">Any source</option><option>BofA</option><option>Capital One</option><option>Venmo</option><option>Gusto</option><option>Manual</option><option>Recurring</option><option>Other</option></select>
+<label class="tsLabel" for="ruleDir">Direction</label><select id="ruleDir"><option value="">Any direction</option><option value="in">Money in</option><option value="out">Money out</option></select>
+<label class="tsLabel" for="ruleAmtOp">Amount</label><div class="row2"><select id="ruleAmtOp"><option value="">Any amount</option><option value="eq">Exactly</option><option value="lte">At most</option><option value="gte">At least</option></select><input id="ruleAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div>
+<label class="tsLabel" for="ruleAction">Then</label><select id="ruleAction"><option value="category">Set the category</option><option value="rename">Rename it to</option><option value="omit">Omit it from my budget</option><option value="offset">Offset spending (money in pays down spending)</option></select>
+<div id="ruleCatWrap"><label class="tsLabel" for="ruleCat">Category</label><select id="ruleCat"></select></div>
+<div id="ruleNameWrap" class="hidden"><label class="tsLabel" for="ruleName">New name</label><input id="ruleName" type="text" placeholder="Display name"></div>
+<p class="hint">The rule applies to matching transactions already in your list, and automatically to new ones.</p>
+<div class="sheetBtns"><button id="ruleCancelBtn" class="ghost" type="button">Cancel</button><button id="ruleSaveBtn" type="button">Create rule</button></div></div></div>
 
 <nav id="tabBar" class="hidden">
   <button data-view="home" class="tab active"><span class="tabIcon"><svg class="ic" width="20" height="20"
@@ -990,7 +1004,12 @@ function totals(txns, range) {
     if (t.omitted) return; // omitted transactions never count and are hidden from lists
     if (t.date < range.start || t.date > range.end) return;
     if (t.direction === 'out' && t.category !== 'Transfer') { spent += t.cents; byCat[t.category] = (byCat[t.category] || 0) + t.cents; byDay[t.date] = (byDay[t.date] || 0) + t.cents; }
-    else if (t.direction === 'in' && t.category !== 'Transfer') income += t.cents;
+    else if (t.direction === 'in' && t.category !== 'Transfer') {
+      if (t.offset) { // money back that pays down spending instead of counting as income
+        spent -= t.cents;
+        if (t.category !== 'Income') { byCat[t.category] = (byCat[t.category] || 0) - t.cents; byDay[t.date] = (byDay[t.date] || 0) - t.cents; }
+      } else income += t.cents;
+    }
     else if (t.category === 'Transfer') { /* transfers tracked in list, excluded from spent/income */ }
   });
   return { spent: spent, income: income, net: income - spent, byCat: byCat, byDay: byDay };
@@ -1176,6 +1195,9 @@ function openTxnSheet(id) {
   $('tsMerchant').textContent = t.merchant;
   $('tsDetail').textContent = (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date + ' · ' + t.source + (t.note ? ' · ' + t.note : '');
   $('tsCat').innerHTML = P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('');
+  var ob = $('tsOffsetBtn');
+  ob.classList.toggle('hidden', t.direction !== 'in');
+  ob.textContent = t.offset ? 'Stop offsetting spending' : 'Offset spending…';
   $('txnSheet').classList.remove('hidden');
 }
 function closeTxnSheet() { $('txnSheet').classList.add('hidden'); tsId = null; }
@@ -1462,14 +1484,24 @@ function showRuleOmitToast(batch, rules) {
   if (undoTimer) clearTimeout(undoTimer);
   undoTimer = setTimeout(hideUndoToast, 10000);
 }
+function ruleSummary(r) {
+  var scope = [r.source || 'Any source'];
+  if (r.direction) scope.push(r.direction === 'in' ? 'money in' : 'money out');
+  if (r.amountOp && r.amountCents != null) scope.push((r.amountOp === 'eq' ? '= ' : r.amountOp === 'lte' ? '≤ ' : '≥ ') + fmt(r.amountCents));
+  var a = r.action || 'omit', effect;
+  if (a === 'omit') effect = 'omits from budget · ' + state.txns.filter(function (t) { return t.omitted && ruleMatches(r, t); }).length + ' omitted now';
+  else if (a === 'offset') effect = 'offsets ' + (r.category ? r.category + ' ' : '') + 'spending · applied to ' + state.txns.filter(function (t) { return !t.omitted && t.offset && ruleMatches(r, t); }).length;
+  else if (a === 'category') effect = 'sets category to ' + (r.category || 'Other') + ' · matches ' + state.txns.filter(function (t) { return ruleMatches(r, t); }).length;
+  else effect = 'renames to “' + (r.newName || '') + '” · matches ' + state.txns.filter(function (t) { return ruleMatches(r, t); }).length;
+  return scope.join(' · ') + ' · ' + effect;
+}
 function renderRules() {
   var box = $('rulesList');
   if (!box) return;
   var rules = state.rules || [];
   box.innerHTML = rules.length ? rules.map(function (r) {
-    var n = state.txns.filter(function (t) { return t.omitted && ruleMatches(r, t); }).length;
-    return '<div class="txn out"><div class="txnMain"><strong>' + esc(r.merchant) + '</strong><span class="meta">' + esc(r.source) + ' · omitting ' + n + ' now</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
-  }).join('') : '<p class="hint">No rules yet — tap a transaction → Omit → “Omit all similar”.</p>';
+    return '<div class="txn ' + ((r.action || 'omit') === 'offset' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(r.merchant) + '</strong><span class="meta">' + esc(ruleSummary(r)) + '</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
+  }).join('') : '<p class="hint">No rules yet — tap a transaction → “Make a rule…”, or use New rule below.</p>';
 }
 function migrateOmitFix() {
   if (state.omitFixV22) return;
@@ -1497,10 +1529,35 @@ function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(
 function isCardPayment(t) { return (t.source === 'Capital One' || t.source === 'BofA') && /payment/i.test(t.merchant || ''); }
 /* User rules ("omit all similar"): match on merchant name + source. */
 function normMerchant(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
-function ruleMatches(rule, t) { return (rule.source === 'Any' || rule.source === t.source) && normMerchant(rule.merchant) === normMerchant(t.merchant); }
-function matchesAnyRule(t) { return (state.rules || []).some(function (r) { return ruleMatches(r, t); }); }
+/* A rule matches on source, direction, and amount when set, plus the merchant
+   name: an exact normalized match by default, or a keyword "contains" match
+   for rules made in the editor (Rocket Money style). */
+function ruleMatches(rule, t) {
+  if (rule.source && rule.source !== 'Any' && rule.source !== t.source) return false;
+  if (rule.direction && rule.direction !== t.direction) return false;
+  if (rule.amountOp && rule.amountCents != null) {
+    var a = Math.abs(t.cents);
+    if (rule.amountOp === 'eq' && a !== rule.amountCents) return false;
+    if (rule.amountOp === 'lte' && a > rule.amountCents) return false;
+    if (rule.amountOp === 'gte' && a < rule.amountCents) return false;
+  }
+  var kw = normMerchant(rule.merchant || '');
+  if (!kw) return false;
+  var name = normMerchant(t.origMerchant || t.merchant);
+  return rule.contains ? name.indexOf(kw) >= 0 : name === kw;
+}
+function applyRuleTo(t, r) {
+  var a = r.action || 'omit';
+  if (a === 'omit') t.omitted = true;
+  else if (a === 'offset') { if (t.direction === 'in' && !t.omitted) { t.offset = true; if (r.category) t.category = r.category; } }
+  else if (a === 'category') { if (r.category) t.category = r.category; }
+  else if (a === 'rename') { if (r.newName) { if (!t.origMerchant) t.origMerchant = t.merchant; t.merchant = r.newName; } }
+}
+function applyAllRules(t) { (state.rules || []).forEach(function (r) { if (ruleMatches(r, t)) applyRuleTo(t, r); }); }
+function matchesAnyRule(t) { return (state.rules || []).some(function (r) { return (r.action || 'omit') === 'omit' && ruleMatches(r, t); }); }
+function findRule(t, action) { return (state.rules || []).filter(function (r) { return (r.action || 'omit') === action && ruleMatches(r, t); })[0] || null; }
 function addTxns(drafts) {
-  var withIds = drafts.map(function (d) { var t = Object.assign({ id: uid() }, d); if (isCardPayment(t) || matchesAnyRule(t)) t.omitted = true; return t; });
+  var withIds = drafts.map(function (d) { var t = Object.assign({ id: uid() }, d); if (isCardPayment(t)) t.omitted = true; applyAllRules(t); return t; });
   var res = P.dedup(state.txns, withIds);
   state.txns = state.txns.concat(res.added); save(); renderAll();
   return res;
@@ -1560,6 +1617,141 @@ $('tsDeleteBtn').addEventListener('click', function () {
   closeTxnSheet();
   openConfirm('Delete this item?', t.merchant + ' · ' + (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date, 'Delete', function () { deleteTxns([id]); });
 });
+/* ---------- Offset: money back that pays down spending instead of counting as income ---------- */
+var offsetSheetIds = null;
+var offsetSlot = null;
+function showOffsetToast(batch, madeRules) {
+  if (!batch.length) { showMsgToast('Nothing to offset.'); return; }
+  offsetSlot = batch;
+  var created = madeRules || [];
+  $('toastMsg').textContent = (batch.length === 1 ? 'Offsetting ' + batch[0].merchant + ' +' + fmt(batch[0].cents) : 'Offsetting ' + batch.length + ' items') + (created.length ? ' · rule created: ' + created.map(function (r) { return r.merchant; }).join(', ') : '');
+  $('toastUndo').onclick = function () {
+    if (offsetSlot) offsetSlot.forEach(function (t) { t.offset = false; });
+    if (created.length) { var rids = created.map(function (r) { return r.id; }); state.rules = state.rules.filter(function (r) { return rids.indexOf(r.id) < 0; }); }
+    offsetSlot = null;
+    save(); renderAll();
+    hideUndoToast();
+  };
+  $('toast').classList.remove('hidden');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+function showMsgToast(msg) {
+  $('toastMsg').textContent = msg;
+  $('toastUndo').onclick = function () { hideUndoToast(); };
+  $('toast').classList.remove('hidden');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+function offsetTxns(ids) {
+  var batch = [];
+  state.txns.forEach(function (t) { if (!t.omitted && !t.offset && t.direction === 'in' && ids.indexOf(t.id) >= 0) { t.offset = true; batch.push(t); } });
+  if (batch.length) save();
+  renderAll();
+  showOffsetToast(batch, []);
+}
+function offsetWithRules(ids) {
+  var keys = {}, made = [];
+  ids.forEach(function (id) {
+    var t = state.txns.filter(function (x) { return x.id === id; })[0];
+    if (!t) return;
+    var k = normMerchant(t.merchant) + '|' + t.source;
+    if (keys[k]) return;
+    keys[k] = 1;
+    if (!findRule(t, 'offset')) {
+      var rule = { id: uid(), merchant: t.merchant, source: t.source, action: 'offset', category: t.category !== 'Income' ? t.category : null };
+      state.rules.push(rule); made.push(rule);
+    }
+  });
+  var batch = [];
+  state.txns.forEach(function (t) {
+    if (t.omitted || t.offset || t.direction !== 'in') return;
+    var r = findRule(t, 'offset');
+    if (r) { t.offset = true; if (r.category) t.category = r.category; batch.push(t); }
+  });
+  save(); renderAll();
+  showOffsetToast(batch, made);
+}
+function openOffsetSheet(ids) {
+  offsetSheetIds = ids;
+  var keys = {}, names = [];
+  state.txns.forEach(function (t) {
+    if (ids.indexOf(t.id) < 0) return;
+    var k = normMerchant(t.merchant) + '|' + t.source;
+    if (!keys[k]) { keys[k] = 1; names.push(t.merchant + ' · ' + t.source); }
+  });
+  $('offsetDetail').textContent = 'Offsetting means this money pays down your spending instead of counting as income. “Offset all similar” creates a rule for ' + names.join(' and ') + ' — it also offsets matching items already in your list, and every future one with the same name and source.';
+  $('offsetSheet').classList.remove('hidden');
+}
+function closeOffsetSheet() { $('offsetSheet').classList.add('hidden'); offsetSheetIds = null; }
+$('offsetCancelBtn').addEventListener('click', closeOffsetSheet);
+$('offsetSheet').addEventListener('click', function (e) { if (e.target === $('offsetSheet')) closeOffsetSheet(); });
+$('offsetJustBtn').addEventListener('click', function () { var ids = offsetSheetIds; closeOffsetSheet(); if (ids) offsetTxns(ids); });
+$('offsetRuleBtn').addEventListener('click', function () { var ids = offsetSheetIds; closeOffsetSheet(); if (ids) offsetWithRules(ids); });
+$('tsOffsetBtn').addEventListener('click', function () {
+  var t = tsId ? findTxn(tsId) : null;
+  if (!t) { closeTxnSheet(); return; }
+  var id = t.id;
+  closeTxnSheet();
+  if (t.offset) { t.offset = false; save(); renderAll(); showMsgToast('No longer offsetting ' + t.merchant + ' — it counts as income again.'); }
+  else openOffsetSheet([id]);
+});
+
+/* ---------- Rule editor: match (merchant keyword, source, direction, amount) + action ---------- */
+function syncRuleParamVisibility() {
+  var a = $('ruleAction').value;
+  $('ruleCatWrap').classList.toggle('hidden', !(a === 'category' || a === 'offset'));
+  $('ruleNameWrap').classList.toggle('hidden', a !== 'rename');
+}
+function openRuleEditor(prefill) {
+  $('ruleMerchant').value = prefill && prefill.merchant || '';
+  $('ruleSource').value = prefill && prefill.source || '';
+  $('ruleDir').value = prefill && prefill.direction || '';
+  $('ruleAmtOp').value = '';
+  $('ruleAmt').value = '';
+  $('ruleAction').value = 'category';
+  $('ruleCat').innerHTML = P.CATEGORIES.map(function (c) { return '<option>' + c + '</option>'; }).join('');
+  $('ruleCat').value = prefill && prefill.category && prefill.category !== 'Income' ? prefill.category : 'Other';
+  $('ruleName').value = '';
+  syncRuleParamVisibility();
+  $('ruleSheet').classList.remove('hidden');
+}
+function closeRuleSheet() { $('ruleSheet').classList.add('hidden'); }
+$('ruleAction').addEventListener('change', syncRuleParamVisibility);
+$('newRuleBtn').addEventListener('click', function () { openRuleEditor(null); });
+$('ruleCancelBtn').addEventListener('click', closeRuleSheet);
+$('ruleSheet').addEventListener('click', function (e) { if (e.target === $('ruleSheet')) closeRuleSheet(); });
+$('tsRuleBtn').addEventListener('click', function () {
+  var t = tsId ? findTxn(tsId) : null;
+  closeTxnSheet();
+  openRuleEditor(t ? { merchant: t.origMerchant || t.merchant, source: t.source, direction: t.direction, category: t.category } : null);
+});
+$('ruleSaveBtn').addEventListener('click', function () {
+  var kw = $('ruleMerchant').value.trim();
+  if (!kw) { showMsgToast('Give the rule a merchant name to match.'); return; }
+  var action = $('ruleAction').value;
+  var amtOp = $('ruleAmtOp').value || null, amtCents = null;
+  if (amtOp) {
+    var v = parseFloat($('ruleAmt').value);
+    if (isNaN(v) || v < 0) { showMsgToast('Enter an amount for the rule, or set Amount to “Any amount”.'); return; }
+    amtCents = Math.round(v * 100);
+  }
+  var newName = action === 'rename' ? $('ruleName').value.trim() : null;
+  if (action === 'rename' && !newName) { showMsgToast('Enter the new name for the rule.'); return; }
+  var rule = { id: uid(), merchant: kw, contains: true, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: (action === 'category' || action === 'offset') ? $('ruleCat').value : null, newName: newName };
+  state.rules.push(rule);
+  var n = 0;
+  state.txns.forEach(function (t) {
+    if (!ruleMatches(rule, t)) return;
+    var before = t.merchant + '|' + t.category + '|' + t.omitted + '|' + t.offset;
+    applyRuleTo(t, rule);
+    if ((t.merchant + '|' + t.category + '|' + t.omitted + '|' + t.offset) !== before) n++;
+  });
+  save(); renderAll();
+  closeRuleSheet();
+  showMsgToast('Rule created — applied to ' + n + ' transaction' + (n === 1 ? '' : 's') + '.');
+});
+
 $('tsOmitBtn').addEventListener('click', function () {
   var id = tsId;
   closeTxnSheet();

@@ -249,7 +249,12 @@ function totals(txns, range) {
     if (t.omitted) return; // omitted transactions never count and are hidden from lists
     if (t.date < range.start || t.date > range.end) return;
     if (t.direction === 'out' && t.category !== 'Transfer') { spent += t.cents; byCat[t.category] = (byCat[t.category] || 0) + t.cents; byDay[t.date] = (byDay[t.date] || 0) + t.cents; }
-    else if (t.direction === 'in' && t.category !== 'Transfer') income += t.cents;
+    else if (t.direction === 'in' && t.category !== 'Transfer') {
+      if (t.offset) { // money back that pays down spending instead of counting as income
+        spent -= t.cents;
+        if (t.category !== 'Income') { byCat[t.category] = (byCat[t.category] || 0) - t.cents; byDay[t.date] = (byDay[t.date] || 0) - t.cents; }
+      } else income += t.cents;
+    }
     else if (t.category === 'Transfer') { /* transfers tracked in list, excluded from spent/income */ }
   });
   return { spent: spent, income: income, net: income - spent, byCat: byCat, byDay: byDay };

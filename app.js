@@ -116,6 +116,9 @@ function openTxnSheet(id) {
   $('tsMerchant').textContent = t.merchant;
   $('tsDetail').textContent = (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date + ' · ' + t.source + (t.note ? ' · ' + t.note : '');
   $('tsCat').innerHTML = P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('');
+  var ob = $('tsOffsetBtn');
+  ob.classList.toggle('hidden', t.direction !== 'in');
+  ob.textContent = t.offset ? 'Stop offsetting spending' : 'Offset spending…';
   $('txnSheet').classList.remove('hidden');
 }
 function closeTxnSheet() { $('txnSheet').classList.add('hidden'); tsId = null; }
@@ -402,14 +405,24 @@ function showRuleOmitToast(batch, rules) {
   if (undoTimer) clearTimeout(undoTimer);
   undoTimer = setTimeout(hideUndoToast, 10000);
 }
+function ruleSummary(r) {
+  var scope = [r.source || 'Any source'];
+  if (r.direction) scope.push(r.direction === 'in' ? 'money in' : 'money out');
+  if (r.amountOp && r.amountCents != null) scope.push((r.amountOp === 'eq' ? '= ' : r.amountOp === 'lte' ? '≤ ' : '≥ ') + fmt(r.amountCents));
+  var a = r.action || 'omit', effect;
+  if (a === 'omit') effect = 'omits from budget · ' + state.txns.filter(function (t) { return t.omitted && ruleMatches(r, t); }).length + ' omitted now';
+  else if (a === 'offset') effect = 'offsets ' + (r.category ? r.category + ' ' : '') + 'spending · applied to ' + state.txns.filter(function (t) { return !t.omitted && t.offset && ruleMatches(r, t); }).length;
+  else if (a === 'category') effect = 'sets category to ' + (r.category || 'Other') + ' · matches ' + state.txns.filter(function (t) { return ruleMatches(r, t); }).length;
+  else effect = 'renames to “' + (r.newName || '') + '” · matches ' + state.txns.filter(function (t) { return ruleMatches(r, t); }).length;
+  return scope.join(' · ') + ' · ' + effect;
+}
 function renderRules() {
   var box = $('rulesList');
   if (!box) return;
   var rules = state.rules || [];
   box.innerHTML = rules.length ? rules.map(function (r) {
-    var n = state.txns.filter(function (t) { return t.omitted && ruleMatches(r, t); }).length;
-    return '<div class="txn out"><div class="txnMain"><strong>' + esc(r.merchant) + '</strong><span class="meta">' + esc(r.source) + ' · omitting ' + n + ' now</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
-  }).join('') : '<p class="hint">No rules yet — tap a transaction → Omit → “Omit all similar”.</p>';
+    return '<div class="txn ' + ((r.action || 'omit') === 'offset' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(r.merchant) + '</strong><span class="meta">' + esc(ruleSummary(r)) + '</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
+  }).join('') : '<p class="hint">No rules yet — tap a transaction → “Make a rule…”, or use New rule below.</p>';
 }
 function migrateOmitFix() {
   if (state.omitFixV22) return;
@@ -437,10 +450,35 @@ function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(
 function isCardPayment(t) { return (t.source === 'Capital One' || t.source === 'BofA') && /payment/i.test(t.merchant || ''); }
 /* User rules ("omit all similar"): match on merchant name + source. */
 function normMerchant(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
-function ruleMatches(rule, t) { return (rule.source === 'Any' || rule.source === t.source) && normMerchant(rule.merchant) === normMerchant(t.merchant); }
-function matchesAnyRule(t) { return (state.rules || []).some(function (r) { return ruleMatches(r, t); }); }
+/* A rule matches on source, direction, and amount when set, plus the merchant
+   name: an exact normalized match by default, or a keyword "contains" match
+   for rules made in the editor (Rocket Money style). */
+function ruleMatches(rule, t) {
+  if (rule.source && rule.source !== 'Any' && rule.source !== t.source) return false;
+  if (rule.direction && rule.direction !== t.direction) return false;
+  if (rule.amountOp && rule.amountCents != null) {
+    var a = Math.abs(t.cents);
+    if (rule.amountOp === 'eq' && a !== rule.amountCents) return false;
+    if (rule.amountOp === 'lte' && a > rule.amountCents) return false;
+    if (rule.amountOp === 'gte' && a < rule.amountCents) return false;
+  }
+  var kw = normMerchant(rule.merchant || '');
+  if (!kw) return false;
+  var name = normMerchant(t.origMerchant || t.merchant);
+  return rule.contains ? name.indexOf(kw) >= 0 : name === kw;
+}
+function applyRuleTo(t, r) {
+  var a = r.action || 'omit';
+  if (a === 'omit') t.omitted = true;
+  else if (a === 'offset') { if (t.direction === 'in' && !t.omitted) { t.offset = true; if (r.category) t.category = r.category; } }
+  else if (a === 'category') { if (r.category) t.category = r.category; }
+  else if (a === 'rename') { if (r.newName) { if (!t.origMerchant) t.origMerchant = t.merchant; t.merchant = r.newName; } }
+}
+function applyAllRules(t) { (state.rules || []).forEach(function (r) { if (ruleMatches(r, t)) applyRuleTo(t, r); }); }
+function matchesAnyRule(t) { return (state.rules || []).some(function (r) { return (r.action || 'omit') === 'omit' && ruleMatches(r, t); }); }
+function findRule(t, action) { return (state.rules || []).filter(function (r) { return (r.action || 'omit') === action && ruleMatches(r, t); })[0] || null; }
 function addTxns(drafts) {
-  var withIds = drafts.map(function (d) { var t = Object.assign({ id: uid() }, d); if (isCardPayment(t) || matchesAnyRule(t)) t.omitted = true; return t; });
+  var withIds = drafts.map(function (d) { var t = Object.assign({ id: uid() }, d); if (isCardPayment(t)) t.omitted = true; applyAllRules(t); return t; });
   var res = P.dedup(state.txns, withIds);
   state.txns = state.txns.concat(res.added); save(); renderAll();
   return res;
@@ -500,6 +538,141 @@ $('tsDeleteBtn').addEventListener('click', function () {
   closeTxnSheet();
   openConfirm('Delete this item?', t.merchant + ' · ' + (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date, 'Delete', function () { deleteTxns([id]); });
 });
+/* ---------- Offset: money back that pays down spending instead of counting as income ---------- */
+var offsetSheetIds = null;
+var offsetSlot = null;
+function showOffsetToast(batch, madeRules) {
+  if (!batch.length) { showMsgToast('Nothing to offset.'); return; }
+  offsetSlot = batch;
+  var created = madeRules || [];
+  $('toastMsg').textContent = (batch.length === 1 ? 'Offsetting ' + batch[0].merchant + ' +' + fmt(batch[0].cents) : 'Offsetting ' + batch.length + ' items') + (created.length ? ' · rule created: ' + created.map(function (r) { return r.merchant; }).join(', ') : '');
+  $('toastUndo').onclick = function () {
+    if (offsetSlot) offsetSlot.forEach(function (t) { t.offset = false; });
+    if (created.length) { var rids = created.map(function (r) { return r.id; }); state.rules = state.rules.filter(function (r) { return rids.indexOf(r.id) < 0; }); }
+    offsetSlot = null;
+    save(); renderAll();
+    hideUndoToast();
+  };
+  $('toast').classList.remove('hidden');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+function showMsgToast(msg) {
+  $('toastMsg').textContent = msg;
+  $('toastUndo').onclick = function () { hideUndoToast(); };
+  $('toast').classList.remove('hidden');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+function offsetTxns(ids) {
+  var batch = [];
+  state.txns.forEach(function (t) { if (!t.omitted && !t.offset && t.direction === 'in' && ids.indexOf(t.id) >= 0) { t.offset = true; batch.push(t); } });
+  if (batch.length) save();
+  renderAll();
+  showOffsetToast(batch, []);
+}
+function offsetWithRules(ids) {
+  var keys = {}, made = [];
+  ids.forEach(function (id) {
+    var t = state.txns.filter(function (x) { return x.id === id; })[0];
+    if (!t) return;
+    var k = normMerchant(t.merchant) + '|' + t.source;
+    if (keys[k]) return;
+    keys[k] = 1;
+    if (!findRule(t, 'offset')) {
+      var rule = { id: uid(), merchant: t.merchant, source: t.source, action: 'offset', category: t.category !== 'Income' ? t.category : null };
+      state.rules.push(rule); made.push(rule);
+    }
+  });
+  var batch = [];
+  state.txns.forEach(function (t) {
+    if (t.omitted || t.offset || t.direction !== 'in') return;
+    var r = findRule(t, 'offset');
+    if (r) { t.offset = true; if (r.category) t.category = r.category; batch.push(t); }
+  });
+  save(); renderAll();
+  showOffsetToast(batch, made);
+}
+function openOffsetSheet(ids) {
+  offsetSheetIds = ids;
+  var keys = {}, names = [];
+  state.txns.forEach(function (t) {
+    if (ids.indexOf(t.id) < 0) return;
+    var k = normMerchant(t.merchant) + '|' + t.source;
+    if (!keys[k]) { keys[k] = 1; names.push(t.merchant + ' · ' + t.source); }
+  });
+  $('offsetDetail').textContent = 'Offsetting means this money pays down your spending instead of counting as income. “Offset all similar” creates a rule for ' + names.join(' and ') + ' — it also offsets matching items already in your list, and every future one with the same name and source.';
+  $('offsetSheet').classList.remove('hidden');
+}
+function closeOffsetSheet() { $('offsetSheet').classList.add('hidden'); offsetSheetIds = null; }
+$('offsetCancelBtn').addEventListener('click', closeOffsetSheet);
+$('offsetSheet').addEventListener('click', function (e) { if (e.target === $('offsetSheet')) closeOffsetSheet(); });
+$('offsetJustBtn').addEventListener('click', function () { var ids = offsetSheetIds; closeOffsetSheet(); if (ids) offsetTxns(ids); });
+$('offsetRuleBtn').addEventListener('click', function () { var ids = offsetSheetIds; closeOffsetSheet(); if (ids) offsetWithRules(ids); });
+$('tsOffsetBtn').addEventListener('click', function () {
+  var t = tsId ? findTxn(tsId) : null;
+  if (!t) { closeTxnSheet(); return; }
+  var id = t.id;
+  closeTxnSheet();
+  if (t.offset) { t.offset = false; save(); renderAll(); showMsgToast('No longer offsetting ' + t.merchant + ' — it counts as income again.'); }
+  else openOffsetSheet([id]);
+});
+
+/* ---------- Rule editor: match (merchant keyword, source, direction, amount) + action ---------- */
+function syncRuleParamVisibility() {
+  var a = $('ruleAction').value;
+  $('ruleCatWrap').classList.toggle('hidden', !(a === 'category' || a === 'offset'));
+  $('ruleNameWrap').classList.toggle('hidden', a !== 'rename');
+}
+function openRuleEditor(prefill) {
+  $('ruleMerchant').value = prefill && prefill.merchant || '';
+  $('ruleSource').value = prefill && prefill.source || '';
+  $('ruleDir').value = prefill && prefill.direction || '';
+  $('ruleAmtOp').value = '';
+  $('ruleAmt').value = '';
+  $('ruleAction').value = 'category';
+  $('ruleCat').innerHTML = P.CATEGORIES.map(function (c) { return '<option>' + c + '</option>'; }).join('');
+  $('ruleCat').value = prefill && prefill.category && prefill.category !== 'Income' ? prefill.category : 'Other';
+  $('ruleName').value = '';
+  syncRuleParamVisibility();
+  $('ruleSheet').classList.remove('hidden');
+}
+function closeRuleSheet() { $('ruleSheet').classList.add('hidden'); }
+$('ruleAction').addEventListener('change', syncRuleParamVisibility);
+$('newRuleBtn').addEventListener('click', function () { openRuleEditor(null); });
+$('ruleCancelBtn').addEventListener('click', closeRuleSheet);
+$('ruleSheet').addEventListener('click', function (e) { if (e.target === $('ruleSheet')) closeRuleSheet(); });
+$('tsRuleBtn').addEventListener('click', function () {
+  var t = tsId ? findTxn(tsId) : null;
+  closeTxnSheet();
+  openRuleEditor(t ? { merchant: t.origMerchant || t.merchant, source: t.source, direction: t.direction, category: t.category } : null);
+});
+$('ruleSaveBtn').addEventListener('click', function () {
+  var kw = $('ruleMerchant').value.trim();
+  if (!kw) { showMsgToast('Give the rule a merchant name to match.'); return; }
+  var action = $('ruleAction').value;
+  var amtOp = $('ruleAmtOp').value || null, amtCents = null;
+  if (amtOp) {
+    var v = parseFloat($('ruleAmt').value);
+    if (isNaN(v) || v < 0) { showMsgToast('Enter an amount for the rule, or set Amount to “Any amount”.'); return; }
+    amtCents = Math.round(v * 100);
+  }
+  var newName = action === 'rename' ? $('ruleName').value.trim() : null;
+  if (action === 'rename' && !newName) { showMsgToast('Enter the new name for the rule.'); return; }
+  var rule = { id: uid(), merchant: kw, contains: true, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: (action === 'category' || action === 'offset') ? $('ruleCat').value : null, newName: newName };
+  state.rules.push(rule);
+  var n = 0;
+  state.txns.forEach(function (t) {
+    if (!ruleMatches(rule, t)) return;
+    var before = t.merchant + '|' + t.category + '|' + t.omitted + '|' + t.offset;
+    applyRuleTo(t, rule);
+    if ((t.merchant + '|' + t.category + '|' + t.omitted + '|' + t.offset) !== before) n++;
+  });
+  save(); renderAll();
+  closeRuleSheet();
+  showMsgToast('Rule created — applied to ' + n + ' transaction' + (n === 1 ? '' : 's') + '.');
+});
+
 $('tsOmitBtn').addEventListener('click', function () {
   var id = tsId;
   closeTxnSheet();
