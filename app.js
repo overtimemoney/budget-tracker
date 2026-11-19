@@ -171,6 +171,28 @@ function openConfirm(title, detail, okLabel, cb) {
 }
 function closeConfirm() { $('confirmSheet').classList.add('hidden'); confirmCb = null; }
 
+/* ---------- Scroll lock: while any sheet is open, the page behind it stays put ---------- */
+var lockY = 0, scrollLocked = false;
+function syncScrollLock() {
+  var anyOpen = ['confirmSheet', 'omitSheet', 'txnSheet', 'offsetSheet', 'ruleSheet'].some(function (id) { var el = $(id); return el && !el.classList.contains('hidden'); });
+  if (anyOpen && !scrollLocked) {
+    lockY = window.scrollY || 0;
+    document.body.style.top = (-lockY) + 'px';
+    document.body.classList.add('locked');
+    scrollLocked = true;
+  } else if (!anyOpen && scrollLocked) {
+    document.body.classList.remove('locked');
+    document.body.style.top = '';
+    scrollLocked = false;
+    window.scrollTo(0, lockY);
+  }
+}
+(function () {
+  var mo = new MutationObserver(syncScrollLock);
+  ['confirmSheet', 'omitSheet', 'txnSheet', 'offsetSheet', 'ruleSheet'].forEach(function (id) { var el = $(id); if (el) mo.observe(el, { attributes: true, attributeFilter: ['class'] }); });
+  syncScrollLock();
+})();
+
 function weekLabel(startISO, endISO) {
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var s = new Date(startISO + 'T12:00:00'), e = new Date(endISO + 'T12:00:00');

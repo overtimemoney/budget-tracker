@@ -200,9 +200,10 @@ button .ic{pointer-events:none}
 .selBar button{width:auto;margin:0;flex:0 1 auto;min-width:0;padding:8px 9px;font-size:13px;white-space:nowrap}
 #selCount{white-space:nowrap;flex:none}
 .selSpacer{flex:1;min-width:2px}
-.sheet{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;overscroll-behavior:contain}
 .sheet.hidden{display:none}
-.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom))}
+.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom));max-height:92vh;overflow-y:auto}
+body.locked{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .sheetCard h3{margin:0 0 6px;font-size:17px;color:var(--text)}
 .sheetBtns{display:flex;gap:10px;margin-top:16px}
 .sheetBtns.col{flex-direction:column}

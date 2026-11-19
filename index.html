@@ -213,9 +213,10 @@ button .ic{pointer-events:none}
 .selBar button{width:auto;margin:0;flex:0 1 auto;min-width:0;padding:8px 9px;font-size:13px;white-space:nowrap}
 #selCount{white-space:nowrap;flex:none}
 .selSpacer{flex:1;min-width:2px}
-.sheet{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;overscroll-behavior:contain}
 .sheet.hidden{display:none}
-.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom))}
+.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom));max-height:92vh;overflow-y:auto}
+body.locked{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .sheetCard h3{margin:0 0 6px;font-size:17px;color:var(--text)}
 .sheetBtns{display:flex;gap:10px;margin-top:16px}
 .sheetBtns.col{flex-direction:column}
@@ -1250,6 +1251,28 @@ function openConfirm(title, detail, okLabel, cb) {
   $('confirmSheet').classList.remove('hidden');
 }
 function closeConfirm() { $('confirmSheet').classList.add('hidden'); confirmCb = null; }
+
+/* ---------- Scroll lock: while any sheet is open, the page behind it stays put ---------- */
+var lockY = 0, scrollLocked = false;
+function syncScrollLock() {
+  var anyOpen = ['confirmSheet', 'omitSheet', 'txnSheet', 'offsetSheet', 'ruleSheet'].some(function (id) { var el = $(id); return el && !el.classList.contains('hidden'); });
+  if (anyOpen && !scrollLocked) {
+    lockY = window.scrollY || 0;
+    document.body.style.top = (-lockY) + 'px';
+    document.body.classList.add('locked');
+    scrollLocked = true;
+  } else if (!anyOpen && scrollLocked) {
+    document.body.classList.remove('locked');
+    document.body.style.top = '';
+    scrollLocked = false;
+    window.scrollTo(0, lockY);
+  }
+}
+(function () {
+  var mo = new MutationObserver(syncScrollLock);
+  ['confirmSheet', 'omitSheet', 'txnSheet', 'offsetSheet', 'ruleSheet'].forEach(function (id) { var el = $(id); if (el) mo.observe(el, { attributes: true, attributeFilter: ['class'] }); });
+  syncScrollLock();
+})();
 
 function weekLabel(startISO, endISO) {
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
