@@ -73,7 +73,7 @@ h3{font-size:15px;font-weight:700;margin:24px 0 6px;color:var(--text)}
 
 /* Controls — Robinhood pills */
 button{font:inherit;font-weight:600;cursor:pointer;border-radius:999px;border:1px solid var(--line);
-  background:var(--field);color:var(--text);padding:9px 16px;transition:transform .06s ease,background .15s ease}
+  background:var(--field);color:var(--text);padding:9px 16px;transition:transform .15s ease-out,background .15s ease}
 button:active{transform:scale(.97)}
 button.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-ink);font-weight:700;width:100%;margin-top:12px;padding:14px;border-radius:999px}
 button.primary.small,button.ghost.small{width:auto;margin-top:0;padding:8px 14px}
@@ -219,7 +219,7 @@ button .ic{pointer-events:none}
 .recMain{flex:1;min-width:0}
 .recMain strong{display:block;font-size:14.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .recAmt{font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(88px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--bg);border-radius:999px;padding:11px 12px 11px 18px;font-size:14px;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,.28);max-width:calc(100vw - 32px)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(88px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--bg);border-radius:999px;padding:11px 12px 11px 18px;font-size:14px;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,.28);max-width:calc(100vw - 32px);animation:toastIn .25s cubic-bezier(.32,.72,0,1)}
 .toast span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast button{background:var(--green-bright);color:#000;border:none;border-radius:999px;padding:7px 14px;font-weight:700;flex:none}
 .toast.hidden{display:none}
@@ -239,7 +239,18 @@ button .ic{pointer-events:none}
 .selSpacer{flex:1;min-width:2px}
 .sheet{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;overscroll-behavior:contain}
 .sheet.hidden{display:none}
-.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom));max-height:92vh;max-height:92dvh;overflow-y:auto}
+.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom));max-height:92vh;max-height:92dvh;overflow-y:auto;transform-origin:50% 100%;animation:sheetIn .25s cubic-bezier(.32,.72,0,1)}
+/* Entrances: from scale .97 + fade, never from scale 0 (250ms, easeOutQuint-ish) */
+@keyframes sheetIn{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(8px) scale(.97)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+@keyframes cardIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+/* Sheet grab handle — drag down to dismiss, drag up meets rubber-band resistance */
+.grab{width:44px;height:20px;margin:-10px auto 4px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:grab;flex:none}
+.grab::before{content:'';width:36px;height:4px;border-radius:99px;background:var(--line)}
+/* Wrong-PIN shake: translateX 0,-10,10,-6,6,-3,0 over 360ms (error text is already red) */
+@keyframes shakeX{0%{transform:translateX(0)}14%{transform:translateX(-10px)}28%{transform:translateX(10px)}44%{transform:translateX(-6px)}60%{transform:translateX(6px)}76%{transform:translateX(-3px)}100%{transform:translateX(0)}}
+.lockCard{animation:cardIn .25s cubic-bezier(.32,.72,0,1)}
+.lockCard.shake{animation:shakeX .36s ease}
 body.locked{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .sheetCard h3{margin:0 0 6px;font-size:17px;color:var(--text)}
 .sheetBtns{display:flex;gap:10px;margin-top:16px}
@@ -268,6 +279,15 @@ input,select,textarea{min-width:0}
    min-width and pushes the box off-screen; resetting the appearance makes the
    field shrink like a normal input (the date picker still opens on tap). */
 input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
+/* Expensive-feel polish: balanced headlines, tabular figures wherever an
+   amount can change, smooth height:auto groundwork for the one <details>,
+   and an instant theme switch (transitions killed mid-flip — except the
+   theme toggle's own icon crossfade, which is the point of flipping). */
+h1,h2,h3{text-wrap:balance}
+.barReadout,.pace,.toast span,.sheetCard p{font-variant-numeric:tabular-nums}
+:root{interpolate-size:allow-keywords}
+.theme-switching *{transition:none!important}
+.theme-switching .themeBtn .ic{transition:opacity .25s ease,filter .25s ease!important}
 
 </style>
 </head>
@@ -700,11 +720,11 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
 <div id="toast" class="toast hidden" role="status"><span id="toastMsg"></span><button id="toastUndo" type="button">Undo</button></div>
 
 
-<div id="confirmSheet" class="sheet hidden"><div class="sheetCard"><h3 id="confirmTitle">Delete this item?</h3><p id="confirmDetail" class="hint"></p><div class="sheetBtns"><button id="confirmCancel" class="ghost" type="button">Cancel</button><button id="confirmOk" class="danger" type="button">Delete</button></div></div></div>
-<div id="omitSheet" class="sheet hidden"><div class="sheetCard"><h3 id="omitTitle">Omit items?</h3><p id="omitDetail" class="hint"></p><div class="sheetBtns col"><button id="omitRuleBtn" type="button">Omit all similar — create rule</button><button id="omitJustBtn" class="ghost" type="button">Omit just these</button><button id="omitCancelBtn" class="ghost" type="button">Cancel</button></div></div></div>
-<div id="txnSheet" class="sheet hidden"><div class="sheetCard"><h3 id="tsMerchant">Transaction</h3><p id="tsDetail" class="hint"></p><label class="tsLabel" for="tsCat">Category</label><select id="tsCat"></select><div class="sheetBtns col"><button id="tsOmitBtn" type="button">Omit…</button><button id="tsOffsetBtn" class="ghost" type="button">Offset spending…</button><button id="tsRuleBtn" class="ghost" type="button">Make a rule…</button><button id="tsDeleteBtn" class="danger" type="button">Delete</button><button id="tsCloseBtn" class="ghost" type="button">Close</button></div></div></div>
-<div id="offsetSheet" class="sheet hidden"><div class="sheetCard"><h3>Offset spending?</h3><p id="offsetDetail" class="hint"></p><div class="sheetBtns col"><button id="offsetRuleBtn" type="button">Offset all similar — create rule</button><button id="offsetJustBtn" class="ghost" type="button">Just this one</button><button id="offsetCancelBtn" class="ghost" type="button">Cancel</button></div></div></div>
-<div id="ruleSheet" class="sheet hidden"><div class="sheetCard"><h3>New rule</h3>
+<div id="confirmSheet" class="sheet hidden"><div class="sheetCard"><div class="grab" aria-hidden="true"></div><h3 id="confirmTitle">Delete this item?</h3><p id="confirmDetail" class="hint"></p><div class="sheetBtns"><button id="confirmCancel" class="ghost" type="button">Cancel</button><button id="confirmOk" class="danger" type="button">Delete</button></div></div></div>
+<div id="omitSheet" class="sheet hidden"><div class="sheetCard"><div class="grab" aria-hidden="true"></div><h3 id="omitTitle">Omit items?</h3><p id="omitDetail" class="hint"></p><div class="sheetBtns col"><button id="omitRuleBtn" type="button">Omit all similar — create rule</button><button id="omitJustBtn" class="ghost" type="button">Omit just these</button><button id="omitCancelBtn" class="ghost" type="button">Cancel</button></div></div></div>
+<div id="txnSheet" class="sheet hidden"><div class="sheetCard"><div class="grab" aria-hidden="true"></div><h3 id="tsMerchant">Transaction</h3><p id="tsDetail" class="hint"></p><label class="tsLabel" for="tsCat">Category</label><select id="tsCat"></select><div class="sheetBtns col"><button id="tsOmitBtn" type="button">Omit…</button><button id="tsOffsetBtn" class="ghost" type="button">Offset spending…</button><button id="tsRuleBtn" class="ghost" type="button">Make a rule…</button><button id="tsDeleteBtn" class="danger" type="button">Delete</button><button id="tsCloseBtn" class="ghost" type="button">Close</button></div></div></div>
+<div id="offsetSheet" class="sheet hidden"><div class="sheetCard"><div class="grab" aria-hidden="true"></div><h3>Offset spending?</h3><p id="offsetDetail" class="hint"></p><div class="sheetBtns col"><button id="offsetRuleBtn" type="button">Offset all similar — create rule</button><button id="offsetJustBtn" class="ghost" type="button">Just this one</button><button id="offsetCancelBtn" class="ghost" type="button">Cancel</button></div></div></div>
+<div id="ruleSheet" class="sheet hidden"><div class="sheetCard"><div class="grab" aria-hidden="true"></div><h3>New rule</h3>
 <p class="hint">Fill in at least one — a rule matches transactions that fit everything you set.</p>
 <label class="tsLabel" for="ruleMerchant">Merchant name contains</label><input id="ruleMerchant" type="text" placeholder="e.g. Sebastien">
 <label class="tsLabel" for="ruleSource">Source</label><select id="ruleSource"><option value="">Any source</option><option>BofA</option><option>Capital One</option><option>Venmo</option><option>Gusto</option><option>Manual</option><option>Recurring</option><option>Other</option></select>
@@ -1192,7 +1212,11 @@ function tryUnlock() {
   if (!state.pin) { unlocked = true; showApp(); return; }
   sha256(state.pin.salt + ':' + pin).then(function (h) {
     if (h === state.pin.hash) { unlocked = true; $('pinError').textContent = ''; showApp(); }
-    else $('pinError').textContent = 'Wrong PIN — try again.';
+    else {
+      $('pinError').textContent = 'Wrong PIN — try again.';
+      var lc = document.querySelector('.lockCard');
+      if (lc) { lc.classList.remove('shake'); void lc.offsetWidth; lc.classList.add('shake'); }
+    }
   });
 }
 $('lockBtn').addEventListener('click', function () { unlocked = false; $('pinInput').value = ''; showLock(); });
@@ -2161,9 +2185,12 @@ function handleHashImport() {
 /* ---------- Theme: light/dark, saved on-device, defaults to the phone's setting ---------- */
 var THEME_KEY = 'mb_theme';
 function applyTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
+  var el = document.documentElement;
+  el.classList.add('theme-switching'); // kill transitions mid-flip so colors snap instead of crossfading muddily
+  el.setAttribute('data-theme', t);
   var m = document.querySelector('meta[name="theme-color"]');
   if (m) m.setAttribute('content', t === 'dark' ? '#000000' : '#ffffff');
+  requestAnimationFrame(function () { requestAnimationFrame(function () { el.classList.remove('theme-switching'); }); });
 }
 function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
 (function initTheme() {
@@ -2234,6 +2261,51 @@ function syncAndReload(btn) {
 }
 $('reloadBtn').addEventListener('click', function () { syncAndReload($('reloadBtn')); });
 $('reloadBtn2').addEventListener('click', function () { syncAndReload($('reloadBtn2')); });
+
+/* ---------- Swipe-to-dismiss: drag a sheet down by its grab handle ----------
+   Past ~90px it dismisses through the sheet's own Cancel/Close button (so all
+   the normal close cleanup runs). Dragging UP meets rubber-band resistance —
+   offset = 64 * over/(over+150), over = pull past 12px — and springs back. */
+(function () {
+  var CLOSE_BTN = { confirmSheet: 'confirmCancel', omitSheet: 'omitCancelBtn', txnSheet: 'tsCloseBtn', offsetSheet: 'offsetCancelBtn', ruleSheet: 'ruleCancelBtn' };
+  Object.keys(CLOSE_BTN).forEach(function (sid) {
+    var sheet = $(sid); if (!sheet) return;
+    var card = sheet.querySelector('.sheetCard'), grab = sheet.querySelector('.grab');
+    if (!card || !grab) return;
+    var startY = null, dy = 0, dragging = false;
+    grab.addEventListener('pointerdown', function (e) {
+      startY = e.clientY; dy = 0; dragging = true;
+      card.style.animation = 'none'; card.style.transition = 'none';
+      if (grab.setPointerCapture) { try { grab.setPointerCapture(e.pointerId); } catch (err) {} }
+      e.preventDefault();
+    });
+    grab.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      dy = e.clientY - startY;
+      if (dy >= 0) card.style.transform = 'translateY(' + dy + 'px)';
+      else { var over = Math.max(0, -dy - 12); card.style.transform = 'translateY(' + (-64 * (over / (over + 150))) + 'px)'; }
+    });
+    function end() {
+      if (!dragging) return; dragging = false;
+      card.style.transition = 'transform .3s cubic-bezier(.32,.72,0,1)';
+      if (dy > 90) {
+        card.style.transform = 'translateY(110%)';
+        var btn = $(CLOSE_BTN[sid]);
+        setTimeout(function () { if (btn) btn.click(); }, 190);
+      } else {
+        card.style.transform = '';
+        setTimeout(function () { card.style.transition = ''; }, 320);
+      }
+    }
+    grab.addEventListener('pointerup', end);
+    grab.addEventListener('pointercancel', end);
+    // When the sheet hides, clear the drag's inline styles so the next open
+    // gets its entrance animation and a clean transform again.
+    new MutationObserver(function () {
+      if (sheet.classList.contains('hidden')) { card.style.animation = ''; card.style.transform = ''; card.style.transition = ''; }
+    }).observe(sheet, { attributes: true, attributeFilter: ['class'] });
+  });
+})();
 
 /* ---------- Init ---------- */
 P.CATEGORIES.forEach(function (c) {

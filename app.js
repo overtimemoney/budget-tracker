@@ -43,7 +43,11 @@ function tryUnlock() {
   if (!state.pin) { unlocked = true; showApp(); return; }
   sha256(state.pin.salt + ':' + pin).then(function (h) {
     if (h === state.pin.hash) { unlocked = true; $('pinError').textContent = ''; showApp(); }
-    else $('pinError').textContent = 'Wrong PIN — try again.';
+    else {
+      $('pinError').textContent = 'Wrong PIN — try again.';
+      var lc = document.querySelector('.lockCard');
+      if (lc) { lc.classList.remove('shake'); void lc.offsetWidth; lc.classList.add('shake'); }
+    }
   });
 }
 $('lockBtn').addEventListener('click', function () { unlocked = false; $('pinInput').value = ''; showLock(); });
@@ -1012,9 +1016,12 @@ function handleHashImport() {
 /* ---------- Theme: light/dark, saved on-device, defaults to the phone's setting ---------- */
 var THEME_KEY = 'mb_theme';
 function applyTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
+  var el = document.documentElement;
+  el.classList.add('theme-switching'); // kill transitions mid-flip so colors snap instead of crossfading muddily
+  el.setAttribute('data-theme', t);
   var m = document.querySelector('meta[name="theme-color"]');
   if (m) m.setAttribute('content', t === 'dark' ? '#000000' : '#ffffff');
+  requestAnimationFrame(function () { requestAnimationFrame(function () { el.classList.remove('theme-switching'); }); });
 }
 function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
 (function initTheme() {
@@ -1085,6 +1092,51 @@ function syncAndReload(btn) {
 }
 $('reloadBtn').addEventListener('click', function () { syncAndReload($('reloadBtn')); });
 $('reloadBtn2').addEventListener('click', function () { syncAndReload($('reloadBtn2')); });
+
+/* ---------- Swipe-to-dismiss: drag a sheet down by its grab handle ----------
+   Past ~90px it dismisses through the sheet's own Cancel/Close button (so all
+   the normal close cleanup runs). Dragging UP meets rubber-band resistance —
+   offset = 64 * over/(over+150), over = pull past 12px — and springs back. */
+(function () {
+  var CLOSE_BTN = { confirmSheet: 'confirmCancel', omitSheet: 'omitCancelBtn', txnSheet: 'tsCloseBtn', offsetSheet: 'offsetCancelBtn', ruleSheet: 'ruleCancelBtn' };
+  Object.keys(CLOSE_BTN).forEach(function (sid) {
+    var sheet = $(sid); if (!sheet) return;
+    var card = sheet.querySelector('.sheetCard'), grab = sheet.querySelector('.grab');
+    if (!card || !grab) return;
+    var startY = null, dy = 0, dragging = false;
+    grab.addEventListener('pointerdown', function (e) {
+      startY = e.clientY; dy = 0; dragging = true;
+      card.style.animation = 'none'; card.style.transition = 'none';
+      if (grab.setPointerCapture) { try { grab.setPointerCapture(e.pointerId); } catch (err) {} }
+      e.preventDefault();
+    });
+    grab.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      dy = e.clientY - startY;
+      if (dy >= 0) card.style.transform = 'translateY(' + dy + 'px)';
+      else { var over = Math.max(0, -dy - 12); card.style.transform = 'translateY(' + (-64 * (over / (over + 150))) + 'px)'; }
+    });
+    function end() {
+      if (!dragging) return; dragging = false;
+      card.style.transition = 'transform .3s cubic-bezier(.32,.72,0,1)';
+      if (dy > 90) {
+        card.style.transform = 'translateY(110%)';
+        var btn = $(CLOSE_BTN[sid]);
+        setTimeout(function () { if (btn) btn.click(); }, 190);
+      } else {
+        card.style.transform = '';
+        setTimeout(function () { card.style.transition = ''; }, 320);
+      }
+    }
+    grab.addEventListener('pointerup', end);
+    grab.addEventListener('pointercancel', end);
+    // When the sheet hides, clear the drag's inline styles so the next open
+    // gets its entrance animation and a clean transform again.
+    new MutationObserver(function () {
+      if (sheet.classList.contains('hidden')) { card.style.animation = ''; card.style.transform = ''; card.style.transition = ''; }
+    }).observe(sheet, { attributes: true, attributeFilter: ['class'] });
+  });
+})();
 
 /* ---------- Init ---------- */
 P.CATEGORIES.forEach(function (c) {
