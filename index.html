@@ -121,7 +121,25 @@ label{font-size:13px;font-weight:600;color:var(--muted)}
 .barReadout.on{color:var(--text)}
 #omitList{margin-top:10px}
 #omitList .txn{align-items:center}
-.bar{width:100%;max-width:22px;background:var(--bar);border-radius:3px 3px 0 0;min-height:2px}
+.bar{width:100%;max-width:22px;background:var(--bar);border-radius:3px 3px 0 0;min-height:2px;transition:opacity .1s ease,background .15s ease}
+.barCol:active .bar{opacity:.45}
+#txnList .txn,#recentList .txn{transition:background .12s ease}
+#txnList .txn:active,#recentList .txn:active{background:var(--wash)}
+
+/* Offline strip — in-flow under the header, only while the phone is offline */
+.offlineBar{background:var(--wash2);color:var(--muted);font-size:12.5px;font-weight:600;text-align:center;padding:8px 12px;border-radius:10px;margin:6px 0 2px}
+.offlineBar.hidden{display:none}
+
+/* Boot skeleton — static placeholders painted with the page itself, so a cold
+   open never shows a blank screen while the app script loads. JS hides it the
+   moment the lock screen or the app renders. */
+#bootSkel{padding-top:10px}
+#bootSkel.hidden{display:none}
+.skel{background:var(--wash2);border-radius:12px;margin:0 0 12px;animation:skelPulse 1.15s ease-in-out infinite}
+.skelHero{height:120px}
+.skelRow{height:56px}
+.skelRow.short{width:62%}
+@keyframes skelPulse{0%,100%{opacity:1}50%{opacity:.4}}
 .barCol span{font-size:10px;color:var(--faint);font-weight:600;max-width:100%;overflow:hidden;text-align:center}
 
 /* Category rows */
@@ -345,6 +363,15 @@ input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left}
     <button id="lockBtn" class="ghost hidden">Lock</button>
   </div>
 </header>
+
+<div id="offlineBar" class="offlineBar hidden">You're offline — everything's saved on this phone. Gmail sync will catch up when you're back.</div>
+
+<div id="bootSkel" aria-hidden="true">
+  <div class="skel skelHero"></div>
+  <div class="skel skelRow"></div>
+  <div class="skel skelRow"></div>
+  <div class="skel skelRow short"></div>
+</div>
 
 <main id="app" class="hidden">
   <!-- HOME -->
@@ -1146,9 +1173,9 @@ function sha256(str) {
     return Array.prototype.map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
   });
 }
-function showLock() { $('lockScreen').classList.remove('hidden'); $('app').classList.add('hidden'); $('tabBar').classList.add('hidden'); }
+function showLock() { $('bootSkel').classList.add('hidden'); $('lockScreen').classList.remove('hidden'); $('app').classList.add('hidden'); $('tabBar').classList.add('hidden'); }
 function showApp() {
-  $('lockScreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('tabBar').classList.remove('hidden');
+  $('bootSkel').classList.add('hidden'); $('lockScreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('tabBar').classList.remove('hidden');
   $('lockBtn').classList.toggle('hidden', !state.pin);
   renderAll();
   if (location.hash.indexOf('#import=') === 0 || location.hash.indexOf('#add=') === 0) handleHashImport();
@@ -1980,9 +2007,11 @@ function gmailBodyText(part) {
   (part.parts || []).forEach(function (p) { out += gmailBodyText(p); });
   return out;
 }
+var OFFLINE_SYNC_MSG = 'You’re offline — Gmail sync will work again when you’re back online. Everything else in the app keeps working.';
 function syncGmail(interactive) {
   if (gmailSyncing) return Promise.resolve({ busy: true });
   if (!gmailClientId()) { renderGmailStatus(); $('gmailResult').textContent = 'Paste your Google Client ID first — the one-time setup steps are right above it.'; return Promise.resolve({ error: 'Gmail isn’t set up yet — open Settings → Gmail sync to connect it.' }); }
+  if (navigator.onLine === false) { $('gmailResult').textContent = OFFLINE_SYNC_MSG; return Promise.resolve({ error: OFFLINE_SYNC_MSG }); }
   gmailSyncing = true; $('gmailResult').textContent = 'Syncing with Gmail…';
   return gmailEnsureToken(interactive).then(function (token) {
     var last = gmailGet(GMAIL_LS.last, ''), since, d;
@@ -2035,7 +2064,7 @@ function syncGmail(interactive) {
   }).catch(function (e) {
     gmailSyncing = false;
     renderGmailStatus();
-    $('gmailResult').textContent = interactive ? (e.message || 'Gmail sync failed.') : 'Gmail is connected, but Google needs a tap this time — open Settings → Gmail sync → Sync now.';
+    $('gmailResult').textContent = navigator.onLine === false ? OFFLINE_SYNC_MSG : (interactive ? (e.message || 'Gmail sync failed.') : 'Gmail is connected, but Google needs a tap this time — open Settings → Gmail sync → Sync now.');
     return { error: $('gmailResult').textContent };
   });
 }
@@ -2212,6 +2241,11 @@ if ($('recCat').querySelector('option[value="Housing"]') || [].some.call($('recC
 $('mDate').value = P.todayISO();
 $('recDate').value = P.todayISO();
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () {}); }
+/* Offline strip: show it whenever the phone reports no connection. */
+function updateOfflineBar() { var b = $('offlineBar'); if (b) b.classList.toggle('hidden', navigator.onLine !== false); }
+window.addEventListener('online', updateOfflineBar);
+window.addEventListener('offline', updateOfflineBar);
+updateOfflineBar();
 if (state.pin) showLock(); else { unlocked = true; showApp(); }
 if (unlocked) handleHashImport();
 window.addEventListener('hashchange', function () { if (unlocked) handleHashImport(); });

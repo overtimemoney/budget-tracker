@@ -28,9 +28,9 @@ function sha256(str) {
     return Array.prototype.map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
   });
 }
-function showLock() { $('lockScreen').classList.remove('hidden'); $('app').classList.add('hidden'); $('tabBar').classList.add('hidden'); }
+function showLock() { $('bootSkel').classList.add('hidden'); $('lockScreen').classList.remove('hidden'); $('app').classList.add('hidden'); $('tabBar').classList.add('hidden'); }
 function showApp() {
-  $('lockScreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('tabBar').classList.remove('hidden');
+  $('bootSkel').classList.add('hidden'); $('lockScreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('tabBar').classList.remove('hidden');
   $('lockBtn').classList.toggle('hidden', !state.pin);
   renderAll();
   if (location.hash.indexOf('#import=') === 0 || location.hash.indexOf('#add=') === 0) handleHashImport();
@@ -862,9 +862,11 @@ function gmailBodyText(part) {
   (part.parts || []).forEach(function (p) { out += gmailBodyText(p); });
   return out;
 }
+var OFFLINE_SYNC_MSG = 'You’re offline — Gmail sync will work again when you’re back online. Everything else in the app keeps working.';
 function syncGmail(interactive) {
   if (gmailSyncing) return Promise.resolve({ busy: true });
   if (!gmailClientId()) { renderGmailStatus(); $('gmailResult').textContent = 'Paste your Google Client ID first — the one-time setup steps are right above it.'; return Promise.resolve({ error: 'Gmail isn’t set up yet — open Settings → Gmail sync to connect it.' }); }
+  if (navigator.onLine === false) { $('gmailResult').textContent = OFFLINE_SYNC_MSG; return Promise.resolve({ error: OFFLINE_SYNC_MSG }); }
   gmailSyncing = true; $('gmailResult').textContent = 'Syncing with Gmail…';
   return gmailEnsureToken(interactive).then(function (token) {
     var last = gmailGet(GMAIL_LS.last, ''), since, d;
@@ -917,7 +919,7 @@ function syncGmail(interactive) {
   }).catch(function (e) {
     gmailSyncing = false;
     renderGmailStatus();
-    $('gmailResult').textContent = interactive ? (e.message || 'Gmail sync failed.') : 'Gmail is connected, but Google needs a tap this time — open Settings → Gmail sync → Sync now.';
+    $('gmailResult').textContent = navigator.onLine === false ? OFFLINE_SYNC_MSG : (interactive ? (e.message || 'Gmail sync failed.') : 'Gmail is connected, but Google needs a tap this time — open Settings → Gmail sync → Sync now.');
     return { error: $('gmailResult').textContent };
   });
 }
@@ -1094,6 +1096,11 @@ if ($('recCat').querySelector('option[value="Housing"]') || [].some.call($('recC
 $('mDate').value = P.todayISO();
 $('recDate').value = P.todayISO();
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () {}); }
+/* Offline strip: show it whenever the phone reports no connection. */
+function updateOfflineBar() { var b = $('offlineBar'); if (b) b.classList.toggle('hidden', navigator.onLine !== false); }
+window.addEventListener('online', updateOfflineBar);
+window.addEventListener('offline', updateOfflineBar);
+updateOfflineBar();
 if (state.pin) showLock(); else { unlocked = true; showApp(); }
 if (unlocked) handleHashImport();
 window.addEventListener('hashchange', function () { if (unlocked) handleHashImport(); });
