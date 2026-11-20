@@ -7,7 +7,7 @@
 @font-face{font-family:'Inter';src:url('fonts/inter-800.woff2') format('woff2');font-weight:800;font-display:swap}
 :root{
   --bg:#ffffff; --panel:#ffffff; --wash:#f7f7f7; --wash2:#f1f1f1;
-  --line:#e8e8e8; --line-soft:#efefef;
+  --line:rgba(0,0,0,.09); --line-soft:rgba(0,0,0,.06);
   --text:#000000; --body:#1c1c1c; --muted:#6f6f6f; --faint:#9a9a9a;
   --green:#00a651; --green-bright:#00c805; --red:#e33d2e; --orange:#ff5000;
   --radius:14px;
@@ -15,18 +15,18 @@
   --primary:#000000; --primary-ink:#ffffff;
   --tile:#000000; --tile-ink:#ffffff; --bar:#000000;
   --seg-active:#ffffff; --nav-bg:rgba(255,255,255,.94);
-  --focus-border:#000000; --focus-ring:rgba(0,0,0,.08); --dashed:#d8d8d8;
+  --focus-border:#000000; --focus-ring:rgba(0,0,0,.08); --dashed:rgba(0,0,0,.15);
 }
 [data-theme="dark"]{
   --bg:#000000; --panel:#000000; --wash:#17191c; --wash2:#23262b;
-  --line:#2e3138; --line-soft:#232529;
+  --line:rgba(255,255,255,.18); --line-soft:rgba(255,255,255,.13);
   --text:#ffffff; --body:#e9e9e9; --muted:#9aa0a6; --faint:#6e7278;
   --green:#00c805; --red:#ff5000;
   --surface:#000000; --field:#17191c; --ink:#ffffff;
   --primary:#00c805; --primary-ink:#000000;
   --tile:#ffffff; --tile-ink:#000000; --bar:#ffffff;
   --seg-active:#2e3138; --nav-bg:rgba(0,0,0,.92);
-  --focus-border:#ffffff; --focus-ring:rgba(255,255,255,.22); --dashed:#3a3d42;
+  --focus-border:#ffffff; --focus-ring:rgba(255,255,255,.22); --dashed:rgba(255,255,255,.23);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -190,10 +190,14 @@ nav{position:fixed;left:0;right:0;bottom:0;display:flex;gap:2px;max-width:560px;
 .fileLabel{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:600;background:var(--field)}
 .hidden{display:none!important}
 .ic{flex:none;vertical-align:middle}
-.themeBtn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;padding:0}
-.themeSun{display:none}
-[data-theme="dark"] .themeSun{display:block}
-[data-theme="dark"] .themeMoon{display:none}
+.themeBtn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;padding:0}
+/* Icon swap: sun and moon are stacked and crossfade with a blur, instead of
+   one vanishing and the other popping in. */
+.themeBtn .ic{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);transition:opacity .25s ease,filter .25s ease}
+.themeMoon{opacity:1;filter:blur(0)}
+.themeSun{opacity:0;filter:blur(4px)}
+[data-theme="dark"] .themeMoon{opacity:0;filter:blur(4px)}
+[data-theme="dark"] .themeSun{opacity:1;filter:blur(0)}
 button .ic{pointer-events:none}
 
 /* Recurring expenses */
@@ -222,7 +226,7 @@ button .ic{pointer-events:none}
 .selSpacer{flex:1;min-width:2px}
 .sheet{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;overscroll-behavior:contain}
 .sheet.hidden{display:none}
-.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom));max-height:92vh;overflow-y:auto}
+.sheetCard{background:var(--panel);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom));max-height:92vh;max-height:92dvh;overflow-y:auto}
 body.locked{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .sheetCard h3{margin:0 0 6px;font-size:17px;color:var(--text)}
 .sheetBtns{display:flex;gap:10px;margin-top:16px}
