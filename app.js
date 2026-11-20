@@ -271,12 +271,23 @@ function renderHome() {
   $('recentList').innerHTML = inRange.map(function (x) { return txnRow(x, true); }).join('');
   $('homeEmpty').classList.toggle('hidden', state.txns.length > 0);
 }
+var txnShown = 120, txnSig = '';
 function renderTxns() {
   var q = ($('searchBox').value || '').toLowerCase(), fs = $('filterSource').value, fc = $('filterCat').value;
+  // Cap the rendered rows (a "Show more" button pages further) so a list of
+  // thousands stays smooth on a slow phone. The cap resets only when the
+  // search/filters actually change, not on every re-render.
+  var sig = q + '|' + fs + '|' + fc;
+  if (sig !== txnSig) { txnSig = sig; txnShown = 120; }
   var list = state.txns.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.cents - a.cents; }).filter(function (t) {
     return !t.omitted && (!q || (t.merchant + ' ' + (t.note || '')).toLowerCase().indexOf(q) >= 0) && (!fs || t.source === fs) && (!fc || t.category === fc);
   });
-  $('txnList').innerHTML = list.length ? list.map(function (t) { return txnRow(t, false); }).join('') : '<p class="hint">No transactions match.</p>';
+  $('txnList').innerHTML = list.length ? list.slice(0, txnShown).map(function (t) { return txnRow(t, false); }).join('') : '<p class="hint">No transactions match.</p>';
+  var more = $('txnMore');
+  if (more) {
+    more.classList.toggle('hidden', list.length <= txnShown);
+    more.textContent = 'Show more — ' + (list.length - txnShown) + ' more below';
+  }
 }
 
 /* ---------- Recurring expenses: file themselves on their due date ---------- */
@@ -565,7 +576,9 @@ $('manualForm').addEventListener('submit', function (e) {
   $('manualForm').reset(); $('mDate').value = P.todayISO();
   document.querySelector('[data-view="txns"]').click();
 });
-$('searchBox').addEventListener('input', renderTxns);
+var searchTimer = null;
+$('searchBox').addEventListener('input', function () { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(renderTxns, 120); });
+$('txnMore').addEventListener('click', function () { txnShown += 120; renderTxns(); });
 $('filterSource').addEventListener('change', renderTxns);
 $('filterCat').addEventListener('change', renderTxns);
 $('txnList').addEventListener('click', onRowTap);
@@ -844,10 +857,19 @@ function gmailEnsureToken(interactive) {
   return gmailRequestToken(interactive);
 }
 function gmailApi(path, token) {
-  return fetch('https://gmail.googleapis.com/gmail/v1/users/me/' + path, { headers: { 'Authorization': 'Bearer ' + token } }).then(function (r) {
+  // Every Gmail call gets a 20-second timeout — a hung connection used to
+  // stall the whole sync forever with no message.
+  var ctl = ('AbortController' in window) ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : null;
+  return fetch('https://gmail.googleapis.com/gmail/v1/users/me/' + path, { headers: { 'Authorization': 'Bearer ' + token }, signal: ctl ? ctl.signal : undefined }).then(function (r) {
+    if (timer) clearTimeout(timer);
     if (r.status === 401) { gmailToken = null; var e = new Error('Google session expired — tap Sync now to reconnect.'); e.code = 401; throw e; }
     if (!r.ok) throw new Error('Gmail request failed (' + r.status + ').');
     return r.json();
+  }).catch(function (e) {
+    if (timer) clearTimeout(timer);
+    if (e && e.name === 'AbortError') throw new Error('Gmail took too long to respond — check your connection and try again.');
+    throw e;
   });
 }
 function gmailHeader(msg, name) {
@@ -887,29 +909,34 @@ function syncGmail(interactive) {
       var seen = {}; gmailSeen().forEach(function (id) { seen[id] = 1; });
       var fresh = ids.filter(function (id) { return !seen[id]; });
       var drafts = [], ignored = 0, fatal = null;
-      var chain = Promise.resolve();
-      fresh.forEach(function (id) {
-        chain = chain.then(function () {
-          if (fatal) return;
-          return gmailApi('messages/' + encodeURIComponent(id) + '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date', token).then(function (msg) {
-            var dateISO = msg.internalDate ? P.todayISO(new Date(Number(msg.internalDate))) : P.todayISO();
-            var draft = P.parseGmailAlert(gmailHeader(msg, 'from'), gmailHeader(msg, 'subject'), dateISO);
-            if (draft) { drafts.push(draft); seen[id] = 1; return; }
-            return gmailApi('messages/' + encodeURIComponent(id) + '?format=full', token).then(function (full) {
-              var text = gmailHeader(full, 'subject') + '\n' + (full.snippet || '') + '\n' + gmailBodyText(full.payload || {});
-              var g = P.parseNotification(text, dateISO);
-              if (g) {
-                var from = gmailHeader(full, 'from').toLowerCase();
-                g.source = from.indexOf('venmo') >= 0 ? 'Venmo' : (from.indexOf('capitalone') >= 0 ? 'Capital One' : (from.indexOf('bankofamerica') >= 0 ? 'BofA' : (from.indexOf('gusto') >= 0 ? 'Gusto' : g.source)));
-                if (g.source === 'Venmo' && /bank transfer/i.test(g.merchant)) g.category = 'Transfer';
-                drafts.push(g);
-              } else ignored++;
-              seen[id] = 1;
-            }).catch(function (e) { if (e && e.code === 401) fatal = e; else { ignored++; seen[id] = 1; } });
-          }).catch(function (e) { if (e && e.code === 401) fatal = e; });
-        });
-      });
-      return chain.then(function () {
+      // Fetch in small parallel batches (4 at a time): a first sync can mean
+      // dozens of alert emails, and fetching one-by-one made that take most
+      // of a minute. Order doesn't matter — addTxns dedups and the list
+      // sorts by date. A 401 stops new batches and fails the sync, exactly
+      // like the old one-by-one chain did.
+      function fetchOne(id) {
+        return gmailApi('messages/' + encodeURIComponent(id) + '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date', token).then(function (msg) {
+          var dateISO = msg.internalDate ? P.todayISO(new Date(Number(msg.internalDate))) : P.todayISO();
+          var draft = P.parseGmailAlert(gmailHeader(msg, 'from'), gmailHeader(msg, 'subject'), dateISO);
+          if (draft) { drafts.push(draft); seen[id] = 1; return; }
+          return gmailApi('messages/' + encodeURIComponent(id) + '?format=full', token).then(function (full) {
+            var text = gmailHeader(full, 'subject') + '\n' + (full.snippet || '') + '\n' + gmailBodyText(full.payload || {});
+            var g = P.parseNotification(text, dateISO);
+            if (g) {
+              var from = gmailHeader(full, 'from').toLowerCase();
+              g.source = from.indexOf('venmo') >= 0 ? 'Venmo' : (from.indexOf('capitalone') >= 0 ? 'Capital One' : (from.indexOf('bankofamerica') >= 0 ? 'BofA' : (from.indexOf('gusto') >= 0 ? 'Gusto' : g.source)));
+              if (g.source === 'Venmo' && /bank transfer/i.test(g.merchant)) g.category = 'Transfer';
+              drafts.push(g);
+            } else ignored++;
+            seen[id] = 1;
+          }).catch(function (e) { if (e && e.code === 401) fatal = e; else { ignored++; seen[id] = 1; } });
+        }).catch(function (e) { if (e && e.code === 401) fatal = e; });
+      }
+      function batches(i) {
+        if (fatal || i >= fresh.length) return Promise.resolve();
+        return Promise.all(fresh.slice(i, i + 4).map(fetchOne)).then(function () { return batches(i + 4); });
+      }
+      return batches(0).then(function () {
         if (fatal) throw fatal;
         var res = addTxns(drafts);
         gmailSet(GMAIL_LS.seen, JSON.stringify(Object.keys(seen).slice(-2000)));
