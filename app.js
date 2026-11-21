@@ -101,10 +101,10 @@ $('dayBars').addEventListener('click', function (e) {
 $('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
 
 /* ---------- Rendering (all totals recomputed fresh from state.txns on every render) ---------- */
-function txnRow(t, compact) {
+function txnRow(t, compact, dim) {
   var sign = t.direction === 'in' ? '+' : '−';
   var cls = t.category === 'Transfer' ? 'transfer' : (t.direction === 'in' ? 'in' : 'out');
-  return '<div class="txn ' + cls + '" data-tid="' + t.id + '">' +
+  return '<div class="txn ' + cls + (dim ? ' dim' : '') + '" data-tid="' + t.id + '">' +
     '<div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
     '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
     '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
@@ -268,7 +268,9 @@ function renderHome() {
     return '<div class="catRow"><span>' + esc(c) + '</span><div class="track"><div class="fill" style="width:' + pct + '%"></div></div><strong>' + fmt(t.byCat[c]) + '</strong></div>';
   }).join('') : '<p class="hint">Nothing spent in this period yet.</p>';
   var inRange = state.txns.filter(function (x) { return !x.omitted && x.date >= range.start && x.date <= range.end; }).sort(function (a, b) { return b.date.localeCompare(a.date); }).slice(0, 8);
-  $('recentList').innerHTML = inRange.map(function (x) { return txnRow(x, true); }).join('');
+  // With a day tapped in the chart, Recent greys out everything that isn't
+  // that day — the tapped day's rows stay full-strength so they pop.
+  $('recentList').innerHTML = inRange.map(function (x) { return txnRow(x, true, !!(selDay && x.date !== barSel)); }).join('');
   $('homeEmpty').classList.toggle('hidden', state.txns.length > 0);
 }
 var txnShown = 120, txnSig = '';
