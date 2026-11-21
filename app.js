@@ -53,6 +53,7 @@ function tryUnlock() {
 $('lockBtn').addEventListener('click', function () { unlocked = false; $('pinInput').value = ''; showLock(); });
 document.addEventListener('visibilitychange', function () {
   if (document.hidden && state.pin && unlocked) { unlocked = false; showLock(); }
+  if (!document.hidden && typeof autoSyncGmail === 'function') autoSyncGmail();
 });
 $('setPinBtn').addEventListener('click', function () {
   var pin = $('newPin').value.trim();
@@ -969,11 +970,29 @@ function syncGmail(interactive) {
     return { error: $('gmailResult').textContent };
   });
 }
+var gmailLastAttempt = 0;
+function autoSyncGmail() {
+  // Runs on open AND every time the app comes back to the front. On iOS the
+  // app usually resumes from the background instead of reloading, so a
+  // page-load-only sync would leave purchases made hours ago unsynced until
+  // he taps Sync himself. Throttled to one attempt per 3 minutes; silent
+  // when nothing new arrives, and a toast announces it when it does bring
+  // something in — so he can see it working.
+  if (gmailSyncing) return;
+  if (gmailGet(GMAIL_LS.connected, '') !== '1' || !gmailClientId()) return;
+  var now = Date.now();
+  if (now - gmailLastAttempt < 3 * 60 * 1000) return;
+  gmailLastAttempt = now;
+  syncGmail(false).then(function (r) {
+    if (r && r.added > 0) showMsgToast('Synced — ' + r.added + ' new transaction' + (r.added === 1 ? '' : 's') + ' from Gmail');
+  });
+}
 function maybeAutoSyncGmail() {
   if (gmailAutoTried) return; gmailAutoTried = true;
-  if (gmailGet(GMAIL_LS.connected, '') !== '1' || !gmailGet(GMAIL_LS.client, '')) return;
-  syncGmail(false);
+  autoSyncGmail();
 }
+window.addEventListener('pageshow', autoSyncGmail);
+window.addEventListener('focus', autoSyncGmail);
 $('gmailSaveClientBtn').addEventListener('click', function () {
   var cid = gmailClientId();
   if (!/\.apps\.googleusercontent\.com$/.test(cid)) { $('gmailResult').textContent = 'That Client ID doesn’t look right — it should end in .apps.googleusercontent.com'; return; }
