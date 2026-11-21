@@ -73,10 +73,16 @@ function venmoNote(text) {
   var lines = text.slice(0, idx).split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
   for (var i = lines.length - 1; i >= 0; i--) {
     var L = lines[i];
-    if (/^\$$/.test(L) || /^[\d,]+$/.test(L) || /^\.\s?\d{2}$/.test(L) || /^\$[\d,]+\.\d{2}$/.test(L)) continue;
+    if (/^\$$/.test(L) || /^[\d,]+$/.test(L) || /^\.\s?\d{2}$/.test(L) || /^\$[\d,]+\.\d{2}$/.test(L) || /^\$\s?[\d,]+$/.test(L)) continue;
     if (/you paid|paid you|sent you|charged you/i.test(L)) return '';
-    if (/^venmo$/i.test(L)) continue;
-    return cleanMerchant(L.replace(/\[|\]/g, ''));
+    // Some renderings leave the "[" of the [See transaction] link behind as
+    // its own line — bracket-only debris must be SKIPPED, not returned as
+    // the note (that's how "One Ramen and Sushi" got lost). Test the raw
+    // remainder, not cleanMerchant's output: it turns "" into "Unknown".
+    var raw = L.replace(/\[|\]/g, '').trim();
+    if (!raw) continue;
+    if (/^venmo$/i.test(raw)) continue;
+    return cleanMerchant(raw);
   }
   return '';
 }

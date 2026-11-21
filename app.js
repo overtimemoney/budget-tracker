@@ -468,6 +468,7 @@ function ruleSummary(r) {
   var scope = [r.source || 'Any source'];
   if (r.direction) scope.push(r.direction === 'in' ? 'money in' : 'money out');
   if (r.amountOp && r.amountCents != null) scope.push((r.amountOp === 'eq' ? '= ' : r.amountOp === 'lte' ? '≤ ' : '≥ ') + fmt(r.amountCents));
+  if (r.note) scope.push('description contains “' + r.note + '”');
   var a = r.action || 'omit', effect;
   if (a === 'omit') effect = 'omits from budget · ' + state.txns.filter(function (t) { return t.omitted && ruleMatches(r, t); }).length + ' omitted now';
   else if (a === 'offset') effect = 'offsets ' + (r.category ? r.category + ' ' : '') + 'spending · applied to ' + state.txns.filter(function (t) { return !t.omitted && t.offset && ruleMatches(r, t); }).length;
@@ -480,7 +481,7 @@ function renderRules() {
   if (!box) return;
   var rules = state.rules || [];
   box.innerHTML = rules.length ? rules.map(function (r) {
-    return '<div class="txn ' + ((r.action || 'omit') === 'offset' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(r.merchant || 'Any name') + '</strong><span class="meta">' + esc(ruleSummary(r)) + '</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
+    return '<div class="txn ' + ((r.action || 'omit') === 'offset' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(r.merchant || (r.note ? 'Description: “' + r.note + '”' : 'Any name')) + '</strong><span class="meta">' + esc(ruleSummary(r)) + '</span></div><button class="ghost small" type="button" data-del-rule="' + r.id + '">Delete</button></div>';
   }).join('') : '<p class="hint">No rules yet — tap a transaction → “Make a rule…”, or use New rule below.</p>';
 }
 function migrateOmitFix() {
@@ -503,6 +504,18 @@ function migrateArtifactFix() {
   state.txns.forEach(function (t) { if (t.source === 'Capital One' && /^capital one purchase$/i.test(t.merchant || '') && t.cents === 91244 && !t.omitted) { t.omitted = true; changed = true; } });
   if (changed) save();
 }
+function migrateNoteFix() {
+  if (state.noteFixV47) return;
+  state.noteFixV47 = true;
+  var changed = false;
+  // The Ivan Lin Venmo payment (2026-11-21): its description ("One Ramen
+  // and Sushi") was dropped by the pre-v47 note extractor — the email's
+  // [See transaction] link left a stray "[" line the extractor mistook for
+  // the description and blanked. Matched exactly, and only fills an EMPTY
+  // note, so nothing already correct can be overwritten.
+  state.txns.forEach(function (t) { if (t.source === 'Venmo' && /^ivan lin$/i.test(t.merchant || '') && t.cents === 2568 && t.date === '2026-11-21' && !t.note) { t.note = 'One Ramen and Sushi'; changed = true; } });
+  if (changed) save();
+}
 var omitOpen = false;
 function renderOmitted() {
   var btn = $('omitToggleBtn'), box = $('omitList');
@@ -514,7 +527,7 @@ function renderOmitted() {
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
   }).join('') : '<p class="hint">Nothing omitted right now.</p>';
 }
-function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 
 /* ---------- Adding / importing (dedup + honest counts) ---------- */
 /* Card-bill payments (Capital One / BofA) are omitted on arrival: paying the
@@ -534,6 +547,7 @@ function ruleMatches(rule, t) {
     if (rule.amountOp === 'lte' && a > rule.amountCents) return false;
     if (rule.amountOp === 'gte' && a < rule.amountCents) return false;
   }
+  if (rule.note && (t.note || '').toLowerCase().indexOf(String(rule.note).toLowerCase()) < 0) return false;
   var kw = normMerchant(rule.merchant || '');
   if (!kw) return true; // no name set: the rule matches on its other criteria alone
   var name = normMerchant(t.origMerchant || t.merchant);
@@ -722,6 +736,7 @@ function openRuleEditor(prefill) {
   clearRuleErr();
   $('ruleAmtStar').hidden = true;
   $('ruleMerchant').value = prefill && prefill.merchant || '';
+  $('ruleNote').value = prefill && prefill.note || '';
   $('ruleSource').value = prefill && prefill.source || '';
   $('ruleDir').value = prefill && prefill.direction || '';
   $('ruleAmtOp').value = '';
@@ -741,10 +756,11 @@ $('ruleSheet').addEventListener('click', function (e) { if (e.target === $('rule
 $('tsRuleBtn').addEventListener('click', function () {
   var t = tsId ? findTxn(tsId) : null;
   closeTxnSheet();
-  openRuleEditor(t ? { merchant: t.origMerchant || t.merchant, source: t.source, direction: t.direction, category: t.category } : null);
+  openRuleEditor(t ? { merchant: t.origMerchant || t.merchant, source: t.source, direction: t.direction, category: t.category, note: t.note || '' } : null);
 });
 $('ruleSaveBtn').addEventListener('click', function () {
   var kw = $('ruleMerchant').value.trim();
+  var noteKw = $('ruleNote').value.trim();
   var action = $('ruleAction').value;
   var amtOp = $('ruleAmtOp').value || null, amtCents = null;
   if (amtOp) {
@@ -752,10 +768,10 @@ $('ruleSaveBtn').addEventListener('click', function () {
     if (isNaN(v) || v < 0) { ruleErr('Enter an amount, or set Amount to “Any amount”.', $('ruleAmt')); return; }
     amtCents = Math.round(v * 100);
   }
-  if (!kw && !$('ruleSource').value && !$('ruleDir').value && !amtOp) { ruleErr('Set at least one thing for the rule to match: a merchant name, a source, a direction, or an amount.', $('ruleMerchant')); return; }
+  if (!kw && !noteKw && !$('ruleSource').value && !$('ruleDir').value && !amtOp) { ruleErr('Set at least one thing for the rule to match: a merchant name, a description, a source, a direction, or an amount.', $('ruleMerchant')); return; }
   var newName = action === 'rename' ? $('ruleName').value.trim() : null;
   if (action === 'rename' && !newName) { ruleErr('Enter the new name for the rule.', $('ruleName')); return; }
-  var rule = { id: uid(), merchant: kw, contains: true, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: action === 'category' ? $('ruleCat').value : action === 'offset' ? ($('ruleCat').value || null) : null, newName: newName };
+  var rule = { id: uid(), merchant: kw, contains: true, note: noteKw || null, source: $('ruleSource').value || null, direction: $('ruleDir').value || null, amountOp: amtOp, amountCents: amtCents, action: action, category: action === 'category' ? $('ruleCat').value : action === 'offset' ? ($('ruleCat').value || null) : null, newName: newName };
   state.rules.push(rule);
   var n = 0;
   state.txns.forEach(function (t) {
@@ -774,9 +790,14 @@ $('tsOmitBtn').addEventListener('click', function () {
   closeTxnSheet();
   if (id) openOmitSheet([id]);
 });
-var omitSheetIds = null;
+var omitSheetIds = null, omitSheetNote = null;
 function openOmitSheet(ids) {
   omitSheetIds = ids;
+  omitSheetNote = null;
+  if (ids.length === 1) { var t0 = findTxn(ids[0]); if (t0 && t0.note) omitSheetNote = t0.note; }
+  var nb = $('omitNoteRuleBtn');
+  nb.classList.toggle('hidden', !omitSheetNote);
+  if (omitSheetNote) nb.textContent = 'Omit all “' + omitSheetNote + '” — create rule';
   var keys = {}, names = [];
   state.txns.forEach(function (t) {
     if (ids.indexOf(t.id) < 0) return;
@@ -787,11 +808,22 @@ function openOmitSheet(ids) {
   $('omitDetail').textContent = '“Omit all similar” creates a rule for ' + names.join(' and ') + ' — it also omits matching items already in your list, and every future import with the same name and source.';
   $('omitSheet').classList.remove('hidden');
 }
-function closeOmitSheet() { $('omitSheet').classList.add('hidden'); omitSheetIds = null; }
+function closeOmitSheet() { $('omitSheet').classList.add('hidden'); omitSheetIds = null; omitSheetNote = null; }
 $('omitCancelBtn').addEventListener('click', closeOmitSheet);
 $('omitSheet').addEventListener('click', function (e) { if (e.target === $('omitSheet')) closeOmitSheet(); });
 $('omitJustBtn').addEventListener('click', function () { var ids = omitSheetIds; closeOmitSheet(); if (ids) omitTxns(ids); });
 $('omitRuleBtn').addEventListener('click', function () { var ids = omitSheetIds; closeOmitSheet(); if (ids) omitWithRules(ids); });
+$('omitNoteRuleBtn').addEventListener('click', function () { var note = omitSheetNote; closeOmitSheet(); if (note) omitWithNoteRule(note); });
+function omitWithNoteRule(note) {
+  // Justin's ask (2026-11-21): the Venmo description itself can be the rule —
+  // omit everything whose description matches, now and on future imports.
+  var rule = { id: uid(), merchant: '', contains: true, note: note, source: null, direction: null, amountOp: null, amountCents: null, action: 'omit', category: null, newName: null };
+  state.rules.push(rule);
+  var batch = [];
+  state.txns.forEach(function (t) { if (!t.omitted && ruleMatches(rule, t)) { t.omitted = true; batch.push(t); } });
+  save(); renderAll();
+  showRuleOmitToast(batch, [rule]);
+}
 $('confirmCancel').addEventListener('click', closeConfirm);
 $('confirmOk').addEventListener('click', function () { var cb = confirmCb; closeConfirm(); if (cb) cb(); });
 $('confirmSheet').addEventListener('click', function (e) { if (e.target === $('confirmSheet')) closeConfirm(); });
