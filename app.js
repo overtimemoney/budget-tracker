@@ -487,6 +487,19 @@ function migrateOmitFix() {
   state.txns.forEach(function (t) { if (isCardPayment(t) && !t.omitted) { t.omitted = true; changed = true; } });
   if (changed) save();
 }
+function migrateArtifactFix() {
+  if (state.artifactFixV44) return;
+  state.artifactFixV44 = true;
+  var changed = false;
+  // The $912.44 Capital One card payment that an old parser build filed as a
+  // purchase (merchant literally "Capital One purchase", counted as spending).
+  // Justin confirmed on 2026-11-20 that it's his card payment and must not
+  // show — it gets the standard card-payment treatment: omitted. Matched
+  // exactly (source + artifact merchant + amount) so no real charge can be
+  // swept up in it.
+  state.txns.forEach(function (t) { if (t.source === 'Capital One' && /^capital one purchase$/i.test(t.merchant || '') && t.cents === 91244 && !t.omitted) { t.omitted = true; changed = true; } });
+  if (changed) save();
+}
 var omitOpen = false;
 function renderOmitted() {
   var btn = $('omitToggleBtn'), box = $('omitList');
@@ -498,7 +511,7 @@ function renderOmitted() {
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
   }).join('') : '<p class="hint">Nothing omitted right now.</p>';
 }
-function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 
 /* ---------- Adding / importing (dedup + honest counts) ---------- */
 /* Card-bill payments (Capital One / BofA) are omitted on arrival: paying the

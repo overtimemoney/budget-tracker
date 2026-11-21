@@ -118,6 +118,18 @@ function parseNotification(line, fallbackDate) {
     return mk(date, cents, 'out', source + ' payment', source, '');
   }
 
+  // Capital One per-transaction alert: "…on Nov. 20, 2026, at SQ *BERRYLINE,
+  // a pending authorization or purchase in the amount of $4.95 was placed or
+  // charged on your Savor Credit Card." Merchant and amount live only in
+  // that sentence — without this branch the row used to fall back to the
+  // artifact merchant "Capital One purchase". (Square names arrive as
+  // "SQ *NAME", usually all caps, so they're title-cased for display.)
+  if (source === 'Capital One' && (m = text.match(/\bat\s+(.+?),\s*a (?:pending authorization or )?purchase in the amount of \$([\d,]+\.\d{2})/i))) {
+    var cm = cleanMerchant(m[1].replace(/^SQ\s*\*\s*/i, ''));
+    if (/^[A-Z0-9 &.'-]+$/.test(cm)) cm = cm.toLowerCase().replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+    return mk(date, Math.round(parseFloat(m[2].replace(/,/g, '')) * 100), 'out', cm, 'Capital One', '');
+  }
+
   // Venmo: "X paid you $25.00 for ..." / "You paid X $25.00"
   if ((m = text.match(/^(.+?)\s+paid you\b/im)) && source === 'Venmo' || /paid you/i.test(text)) {
     merchant = cleanMerchant((text.match(/^(.+?)\s+paid you\b/im) || [])[1] || 'Venmo');
