@@ -127,6 +127,8 @@ label{font-size:13px;font-weight:600;color:var(--muted)}
 #txnList .txn:active,#recentList .txn:active{background:var(--wash)}
 /* Day-selected state: Recent rows that aren't the tapped day fade back */
 #recentList .txn.dim{opacity:.35}
+.checkRow{display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer}
+.checkRow input{width:20px;height:20px;accent-color:var(--ink)}
 
 /* Offline strip — in-flow under the header, only while the phone is offline */
 .offlineBar{background:var(--wash2);color:var(--muted);font-size:12.5px;font-weight:600;text-align:center;padding:8px 12px;border-radius:10px;margin:6px 0 2px}
@@ -614,6 +616,11 @@ h1,h2,h3{text-wrap:balance}
         <li>Uninstalling / clearing site data erases everything — export a backup first if you want to keep it.</li>
       </ul>
     </div>
+    <h3>Display</h3>
+    <div class="secBox">
+      <label class="checkRow"><input id="venmoDescToggle" type="checkbox" checked> Show Venmo descriptions</label>
+      <p class="hint">Venmo payments carry the note the sender wrote (like “One Ramen and Sushi”). Turn this off to omit all of them from your lists at once — the descriptions stay saved on this phone, and turning it back on brings them right back.</p>
+    </div>
     <h3>Rules</h3>
     <div class="secBox">
       <ul>
@@ -624,7 +631,7 @@ h1,h2,h3{text-wrap:balance}
       <h4 class="subHead">Your rules</h4>
       <div id="rulesList"></div>
       <button id="newRuleBtn" class="ghost small" type="button">New rule</button>
-      <p class="hint">Rules match by merchant name (keyword), source, direction, and amount — and can set a category, rename a transaction, omit it, or offset spending with it. They run automatically on new transactions and apply to matching ones already here. Deleting a rule stops it going forward; changes it already made stay until you undo them.</p>
+      <p class="hint">Rules match by merchant name (keyword), description, source, direction, and amount — and can set a category, rename a transaction, omit it, or offset spending with it. They run automatically on new transactions and apply to matching ones already here. Deleting a rule stops it going forward; changes it already made stay until you undo them.</p>
     </div>
     <h3>Omitted transactions</h3>
     <div class="secBox">
@@ -1278,12 +1285,18 @@ $('dayBars').addEventListener('click', function (e) {
 $('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
 
 /* ---------- Rendering (all totals recomputed fresh from state.txns on every render) ---------- */
+function showNote(t) {
+  // Justin's option (2026-11-21): Venmo descriptions can be omitted as a
+  // whole — one Settings switch hides every Venmo note in the lists. The
+  // notes stay stored; flipping the switch back restores them.
+  return !!(t.note && !(state.hideVenmoNotes && t.source === 'Venmo'));
+}
 function txnRow(t, compact, dim) {
   var sign = t.direction === 'in' ? '+' : '−';
   var cls = t.category === 'Transfer' ? 'transfer' : (t.direction === 'in' ? 'in' : 'out');
   return '<div class="txn ' + cls + (dim ? ' dim' : '') + '" data-tid="' + t.id + '">' +
     '<div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
-    '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
+    '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (showNote(t) ? ' · ' + esc(t.note) : '') + '</span></div>' +
     '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
     '</div>';
 }
@@ -1295,7 +1308,7 @@ function openTxnSheet(id) {
   if (!t) return;
   tsId = id;
   $('tsMerchant').textContent = t.merchant;
-  $('tsDetail').textContent = (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date + ' · ' + t.source + (t.note ? ' · ' + t.note : '');
+  $('tsDetail').textContent = (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date + ' · ' + t.source + (showNote(t) ? ' · ' + t.note : '');
   $('tsCat').innerHTML = P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('');
   var ob = $('tsOffsetBtn');
   ob.classList.toggle('hidden', t.direction !== 'in');
@@ -1703,7 +1716,9 @@ function renderOmitted() {
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
   }).join('') : '<p class="hint">Nothing omitted right now.</p>';
 }
-function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); syncDisplayPrefs(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function syncDisplayPrefs() { var tg = $('venmoDescToggle'); if (tg) tg.checked = !state.hideVenmoNotes; }
+$('venmoDescToggle').addEventListener('change', function () { state.hideVenmoNotes = !$('venmoDescToggle').checked; save(); renderAll(); });
 
 /* ---------- Adding / importing (dedup + honest counts) ---------- */
 /* Card-bill payments (Capital One / BofA) are omitted on arrival: paying the
@@ -1970,7 +1985,7 @@ var omitSheetIds = null, omitSheetNote = null;
 function openOmitSheet(ids) {
   omitSheetIds = ids;
   omitSheetNote = null;
-  if (ids.length === 1) { var t0 = findTxn(ids[0]); if (t0 && t0.note) omitSheetNote = t0.note; }
+  if (ids.length === 1) { var t0 = findTxn(ids[0]); if (t0 && showNote(t0)) omitSheetNote = t0.note; }
   var nb = $('omitNoteRuleBtn');
   nb.classList.toggle('hidden', !omitSheetNote);
   if (omitSheetNote) nb.textContent = 'Omit all “' + omitSheetNote + '” — create rule';

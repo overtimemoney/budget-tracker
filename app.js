@@ -102,12 +102,18 @@ $('dayBars').addEventListener('click', function (e) {
 $('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
 
 /* ---------- Rendering (all totals recomputed fresh from state.txns on every render) ---------- */
+function showNote(t) {
+  // Justin's option (2026-11-21): Venmo descriptions can be omitted as a
+  // whole — one Settings switch hides every Venmo note in the lists. The
+  // notes stay stored; flipping the switch back restores them.
+  return !!(t.note && !(state.hideVenmoNotes && t.source === 'Venmo'));
+}
 function txnRow(t, compact, dim) {
   var sign = t.direction === 'in' ? '+' : '−';
   var cls = t.category === 'Transfer' ? 'transfer' : (t.direction === 'in' ? 'in' : 'out');
   return '<div class="txn ' + cls + (dim ? ' dim' : '') + '" data-tid="' + t.id + '">' +
     '<div class="txnMain"><strong>' + esc(t.merchant) + '</strong>' +
-    '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (t.note ? ' · ' + esc(t.note) : '') + '</span></div>' +
+    '<span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + (showNote(t) ? ' · ' + esc(t.note) : '') + '</span></div>' +
     '<div class="txnAmt">' + sign + fmt(t.cents) + '</div>' +
     '</div>';
 }
@@ -119,7 +125,7 @@ function openTxnSheet(id) {
   if (!t) return;
   tsId = id;
   $('tsMerchant').textContent = t.merchant;
-  $('tsDetail').textContent = (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date + ' · ' + t.source + (t.note ? ' · ' + t.note : '');
+  $('tsDetail').textContent = (t.direction === 'in' ? '+' : '−') + fmt(t.cents) + ' · ' + t.date + ' · ' + t.source + (showNote(t) ? ' · ' + t.note : '');
   $('tsCat').innerHTML = P.CATEGORIES.map(function (c) { return '<option' + (c === t.category ? ' selected' : '') + '>' + c + '</option>'; }).join('');
   var ob = $('tsOffsetBtn');
   ob.classList.toggle('hidden', t.direction !== 'in');
@@ -527,7 +533,9 @@ function renderOmitted() {
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
   }).join('') : '<p class="hint">Nothing omitted right now.</p>';
 }
-function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); syncDisplayPrefs(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function syncDisplayPrefs() { var tg = $('venmoDescToggle'); if (tg) tg.checked = !state.hideVenmoNotes; }
+$('venmoDescToggle').addEventListener('change', function () { state.hideVenmoNotes = !$('venmoDescToggle').checked; save(); renderAll(); });
 
 /* ---------- Adding / importing (dedup + honest counts) ---------- */
 /* Card-bill payments (Capital One / BofA) are omitted on arrival: paying the
@@ -794,7 +802,7 @@ var omitSheetIds = null, omitSheetNote = null;
 function openOmitSheet(ids) {
   omitSheetIds = ids;
   omitSheetNote = null;
-  if (ids.length === 1) { var t0 = findTxn(ids[0]); if (t0 && t0.note) omitSheetNote = t0.note; }
+  if (ids.length === 1) { var t0 = findTxn(ids[0]); if (t0 && showNote(t0)) omitSheetNote = t0.note; }
   var nb = $('omitNoteRuleBtn');
   nb.classList.toggle('hidden', !omitSheetNote);
   if (omitSheetNote) nb.textContent = 'Omit all “' + omitSheetNote + '” — create rule';
