@@ -72,6 +72,15 @@ button:disabled{opacity:.55}
 input,select,textarea{font:inherit;width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
   background:var(--field);color:var(--text);margin:5px 0 12px;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
 input:focus,select:focus,textarea:focus{border-color:var(--focus-border);box-shadow:0 0 0 3px var(--focus-ring)}
+/* Dropdown rules (2026-11-21): every select gets an unmistakable caret, a
+   full 48px touch target, and hover feedback. The element stays a native
+   select, so the platform still owns the popup itself — it flips at screen
+   edges, is fully keyboard-operable, and animates on its own timing. */
+select{min-height:48px;padding-right:38px;appearance:none;-webkit-appearance:none;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23000000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 13px center}
+[data-theme="dark"] select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")}
+@media (hover:hover){select:hover{border-color:var(--focus-border)}}
 textarea{resize:vertical;line-height:1.5}
 label{font-size:13px;font-weight:600;color:var(--muted)}
 ::placeholder{color:var(--faint)}
