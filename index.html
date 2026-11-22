@@ -1291,6 +1291,12 @@ document.querySelectorAll('.segBtn').forEach(function (b) {
   });
 });
 function shiftAnchor(dir) {
+  if (dir > 0) {
+    // Stop at the current period (Justin's rule, 2026-11-22): paging forward
+    // ends at this week / this month — there are no future periods to see.
+    var curStart = P.periodRange(period, P.todayISO()).start;
+    if (P.periodRange(period, anchor).start >= curStart) return;
+  }
   var d = new Date(anchor + 'T12:00:00');
   if (period === 'week') d.setDate(d.getDate() + dir * 7); else d.setMonth(d.getMonth() + dir);
   anchor = P.todayISO(d); renderHome();
@@ -1434,6 +1440,8 @@ function renderHome() {
   var t = P.totals(state.txns, range);
   var label = period === 'week' ? weekLabel(range.start, range.end) : new Date(anchor + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   $('periodLabel').textContent = label;
+  // At the current period the forward arrow is spent: dim it and disable it.
+  $('nextPeriod').disabled = range.start >= P.periodRange(period, P.todayISO()).start;
   $('statSpent').textContent = fmt(t.spent);
   $('statIncome').textContent = fmt(t.income);
   $('statNet').textContent = fmt(t.net);
