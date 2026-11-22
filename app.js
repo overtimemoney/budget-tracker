@@ -967,7 +967,7 @@ function syncGmail(interactive) {
   if (gmailSyncing) return Promise.resolve({ busy: true });
   if (!gmailClientId()) { renderGmailStatus(); $('gmailResult').textContent = 'Paste your Google Client ID first — the one-time setup steps are right above it.'; return Promise.resolve({ error: 'Gmail isn’t set up yet — open Settings → Gmail sync to connect it.' }); }
   if (navigator.onLine === false) { $('gmailResult').textContent = OFFLINE_SYNC_MSG; return Promise.resolve({ error: OFFLINE_SYNC_MSG }); }
-  gmailSyncing = true; $('gmailResult').textContent = 'Syncing with Gmail…';
+  gmailSyncing = true; $('gmailResult').innerHTML = '<span class="skelLine" aria-hidden="true"></span>';
   return gmailEnsureToken(interactive).then(function (token) {
     var last = gmailGet(GMAIL_LS.last, ''), since, d;
     if (last) { d = new Date(last); d.setDate(d.getDate() - 3); since = P.todayISO(d); }
@@ -1160,7 +1160,7 @@ $('themeBtn').addEventListener('click', function () {
 /* ---------- Force reload: drop cached app files + service worker, keep localStorage data ---------- */
 function reloadApp(btn) {
   var old = btn ? btn.textContent : '';
-  if (btn) { btn.textContent = 'Reloading…'; btn.disabled = true; }
+  if (btn) { btn.textContent = 'Reloading'; btn.classList.add('skelBusy'); btn.disabled = true; }
   var jobs = [];
   if ('serviceWorker' in navigator) {
     jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -1176,7 +1176,7 @@ function reloadApp(btn) {
     var url = location.pathname + '?v=' + Date.now() + location.hash;
     location.replace(url);
   });
-  setTimeout(function () { if (btn) { btn.textContent = old; btn.disabled = false; } }, 4000);
+  setTimeout(function () { if (btn) { btn.textContent = old; btn.classList.remove('skelBusy'); btn.disabled = false; } }, 4000);
 }
 /* ---------- Sync button: pull new transactions from Gmail, THEN reload the app code.
    If Gmail isn't connected there's nothing to pull, so it just reloads. If the
@@ -1186,10 +1186,10 @@ function syncAndReload(btn) {
   var connected = gmailGet(GMAIL_LS.connected, '') === '1' && !!gmailClientId();
   if (!connected) { reloadApp(btn); return; }
   var oldHTML = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing'; btn.classList.add('skelBusy'); }
   var done = function (outcome) {
     if (outcome && outcome.error) {
-      if (btn) { btn.disabled = false; btn.innerHTML = oldHTML; }
+      if (btn) { btn.disabled = false; btn.innerHTML = oldHTML; btn.classList.remove('skelBusy'); }
       showMsgToast(outcome.error, 6000);
       return;
     }

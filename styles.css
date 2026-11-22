@@ -136,10 +136,19 @@ label{font-size:13px;font-weight:600;color:var(--muted)}
 #bootSkel{padding-top:10px}
 #bootSkel.hidden{display:none}
 .skel{background:var(--wash2);border-radius:12px;margin:0 0 12px;animation:skelPulse 1.15s ease-in-out infinite}
+.skelSeg{height:38px;border-radius:999px}
 .skelHero{height:120px}
+.skelTitle{height:14px;width:34%;border-radius:7px;margin-top:20px}
 .skelRow{height:56px}
 .skelRow.short{width:62%}
 @keyframes skelPulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* Skeleton states (2026-11-21): no spinners and no bare "loading…" text
+   anywhere. The Gmail sync status line becomes a shimmer bar while a sync
+   runs, and a busy Sync/Reload button becomes a shimmering block until
+   its result lands. */
+.skelLine{display:block;height:14px;width:72%;border-radius:7px;background:var(--wash2);animation:skelPulse 1.15s ease-in-out infinite}
+button.skelBusy{color:transparent!important;background:linear-gradient(100deg,var(--wash2) 40%,var(--wash) 50%,var(--wash2) 60%);background-size:200% 100%;animation:skelSweep 1.1s linear infinite;border-color:transparent}
+@keyframes skelSweep{to{background-position:-200% 0}}
 .barCol span{font-size:10px;color:var(--faint);font-weight:600;max-width:100%;overflow:hidden;text-align:center}
 
 /* Category rows */
