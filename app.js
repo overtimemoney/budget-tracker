@@ -105,6 +105,15 @@ $('dayBars').addEventListener('click', function (e) {
   barSel = barSel === col.dataset.iso ? null : col.dataset.iso; // tap again to clear
   renderHome();
 });
+// Clicking anywhere off the chart also clears the day selection (Justin's
+// ask, 2026-11-26) — no need to re-tap the selected bar. Clicks inside the
+// chart are handled above; this only fires for everything else.
+document.addEventListener('click', function (e) {
+  if (!barSel) return;
+  if (e.target.closest && e.target.closest('#dayBars')) return;
+  barSel = null;
+  renderHome();
+});
 $('nextPeriod').addEventListener('click', function () { shiftAnchor(1); });
 
 /* ---------- Rendering (all totals recomputed fresh from state.txns on every render) ---------- */
