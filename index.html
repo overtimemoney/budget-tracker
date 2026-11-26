@@ -1303,17 +1303,19 @@ function shiftAnchor(dir) {
 }
 $('prevPeriod').addEventListener('click', function () { shiftAnchor(-1); });
 $('dayBars').addEventListener('click', function (e) {
+  e._barTap = true; // mark the event: the document handler below must not
+  // treat this as an off-chart click. A flag on the event object survives
+  // renderHome() replacing the bar elements mid-dispatch — an ancestor
+  // lookup on the (now detached) target would not.
   var col = e.target.closest('.barCol');
   if (!col) return;
   barSel = barSel === col.dataset.iso ? null : col.dataset.iso; // tap again to clear
   renderHome();
 });
 // Clicking anywhere off the chart also clears the day selection (Justin's
-// ask, 2026-11-26) — no need to re-tap the selected bar. Clicks inside the
-// chart are handled above; this only fires for everything else.
+// ask, 2026-11-26) — no need to re-tap the selected bar.
 document.addEventListener('click', function (e) {
-  if (!barSel) return;
-  if (e.target.closest && e.target.closest('#dayBars')) return;
+  if (!barSel || e._barTap) return;
   barSel = null;
   renderHome();
 });
