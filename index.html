@@ -926,11 +926,17 @@ function parseNotification(line, fallbackDate) {
   // subject; do NOT run extractDate over the whole body — it would grab the
   // pay-period start date instead.
   if (/gusto/i.test(text) && /getting paid today|check amount/i.test(text)) {
-    var gm = text.match(/check amount[\s\S]{0,60}?\$([\d,]+\.\d{2})/i);
+    // Gusto's layout varies by rendering: in the plain-text part the labels
+    // come in a block first and the values after ("Check amount ## ... ##
+    // Pay period ## ... $1,977.47 ... 2026-11-09 – 2026-11-22"), so the
+    // amount can sit ~110 chars past its label. Take the FIRST $ amount in
+    // a wide window after the label — in both layouts that's the check
+    // amount (the $800 referral promo sits far below it).
+    var gm = text.match(/check amount[\s\S]{0,400}?\$([\d,]+\.\d{2})/i);
     if (!gm) return null;
     var gd = text.match(/getting paid today\s*\((\d{1,2})\/(\d{1,2})\/(\d{4})\)/i);
     var gdate = gd ? gd[3] + '-' + String(gd[1]).padStart(2, '0') + '-' + String(gd[2]).padStart(2, '0') : (fallbackDate || todayISO());
-    var per = text.match(/pay period[\s\S]{0,40}?(\d{4}-\d{2}-\d{2}\s*[–-]\s*\d{4}-\d{2}-\d{2})/i);
+    var per = text.match(/pay period[\s\S]{0,200}?(\d{4}-\d{2}-\d{2}\s*[–—-]\s*\d{4}-\d{2}-\d{2})/i);
     return mk(gdate, Math.round(parseFloat(gm[1].replace(/,/g, '')) * 100), 'in', 'Paycheck', 'Gusto', per ? 'Pay period ' + per[1].replace(/\s+/g, ' ') : '');
   }
   var amtM = text.match(/\$\s?([\d,]+\.\d{2}|[\d,]+)/);
@@ -1732,6 +1738,19 @@ function migrateArtifactFix() {
   state.txns.forEach(function (t) { if (t.source === 'Capital One' && /^capital one purchase$/i.test(t.merchant || '') && t.cents === 91244 && !t.omitted) { t.omitted = true; changed = true; } });
   if (changed) save();
 }
+function migrateGustoSeenFix() {
+  if (state.gustoSeenFixV55) return;
+  state.gustoSeenFixV55 = true;
+  // The 2026-11-27 Gusto paycheck email (msg 1a21dbb7e00b9c1f) failed to
+  // parse under the old Gusto layout windows, but the sync still marked it
+  // seen, which would block re-import forever. Drop that one id from the
+  // seen set so the next sync re-reads it with the fixed parser. Txn-hash
+  // dedup still protects against a double-add if it did land.
+  try {
+    var seen = gmailSeen().filter(function (id) { return id !== '1a21dbb7e00b9c1f'; });
+    gmailSet(GMAIL_LS.seen, JSON.stringify(seen));
+  } catch (e) {}
+}
 function migrateMerchantFix() {
   if (state.merchantFixV49) return;
   state.merchantFixV49 = true;
@@ -1773,7 +1792,7 @@ function renderOmitted() {
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
   }).join('') : '<p class="hint">Nothing omitted right now.</p>';
 }
-function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); migrateMerchantFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); syncDisplayPrefs(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); migrateMerchantFix(); migrateGustoSeenFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); syncDisplayPrefs(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 function syncDisplayPrefs() { var tg = $('venmoDescToggle'); if (tg) tg.checked = !state.hideVenmoNotes; }
 $('venmoDescToggle').addEventListener('change', function () { state.hideVenmoNotes = !$('venmoDescToggle').checked; save(); renderAll(); });
 

@@ -529,6 +529,19 @@ function migrateArtifactFix() {
   state.txns.forEach(function (t) { if (t.source === 'Capital One' && /^capital one purchase$/i.test(t.merchant || '') && t.cents === 91244 && !t.omitted) { t.omitted = true; changed = true; } });
   if (changed) save();
 }
+function migrateGustoSeenFix() {
+  if (state.gustoSeenFixV55) return;
+  state.gustoSeenFixV55 = true;
+  // The 2026-11-27 Gusto paycheck email (msg 1a21dbb7e00b9c1f) failed to
+  // parse under the old Gusto layout windows, but the sync still marked it
+  // seen, which would block re-import forever. Drop that one id from the
+  // seen set so the next sync re-reads it with the fixed parser. Txn-hash
+  // dedup still protects against a double-add if it did land.
+  try {
+    var seen = gmailSeen().filter(function (id) { return id !== '1a21dbb7e00b9c1f'; });
+    gmailSet(GMAIL_LS.seen, JSON.stringify(seen));
+  } catch (e) {}
+}
 function migrateMerchantFix() {
   if (state.merchantFixV49) return;
   state.merchantFixV49 = true;
@@ -570,7 +583,7 @@ function renderOmitted() {
     return '<div class="txn ' + (t.direction === 'in' ? 'in' : 'out') + '"><div class="txnMain"><strong>' + esc(t.merchant) + '</strong><span class="meta">' + esc(t.date) + ' · ' + esc(t.source) + '</span></div><div class="txnAmt">' + sign + fmt(t.cents) + '</div><button class="ghost small" type="button" data-restore="' + t.id + '">Restore</button></div>';
   }).join('') : '<p class="hint">Nothing omitted right now.</p>';
 }
-function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); migrateMerchantFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); syncDisplayPrefs(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
+function renderAll() { if (!unlocked) return; migrateCountFix(); migrateOmitFix(); migrateArtifactFix(); migrateNoteFix(); migrateMerchantFix(); migrateGustoSeenFix(); fileDueRecurring(); renderRecurring(); renderHome(); renderTxns(); renderBudgets(); renderOmitted(); renderRules(); syncDisplayPrefs(); updatePinStatus(); $('removePinBtn').classList.toggle('hidden', !state.pin); }
 function syncDisplayPrefs() { var tg = $('venmoDescToggle'); if (tg) tg.checked = !state.hideVenmoNotes; }
 $('venmoDescToggle').addEventListener('change', function () { state.hideVenmoNotes = !$('venmoDescToggle').checked; save(); renderAll(); });
 

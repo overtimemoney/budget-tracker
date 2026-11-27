@@ -97,11 +97,17 @@ function parseNotification(line, fallbackDate) {
   // subject; do NOT run extractDate over the whole body — it would grab the
   // pay-period start date instead.
   if (/gusto/i.test(text) && /getting paid today|check amount/i.test(text)) {
-    var gm = text.match(/check amount[\s\S]{0,60}?\$([\d,]+\.\d{2})/i);
+    // Gusto's layout varies by rendering: in the plain-text part the labels
+    // come in a block first and the values after ("Check amount ## ... ##
+    // Pay period ## ... $1,977.47 ... 2026-11-09 – 2026-11-22"), so the
+    // amount can sit ~110 chars past its label. Take the FIRST $ amount in
+    // a wide window after the label — in both layouts that's the check
+    // amount (the $800 referral promo sits far below it).
+    var gm = text.match(/check amount[\s\S]{0,400}?\$([\d,]+\.\d{2})/i);
     if (!gm) return null;
     var gd = text.match(/getting paid today\s*\((\d{1,2})\/(\d{1,2})\/(\d{4})\)/i);
     var gdate = gd ? gd[3] + '-' + String(gd[1]).padStart(2, '0') + '-' + String(gd[2]).padStart(2, '0') : (fallbackDate || todayISO());
-    var per = text.match(/pay period[\s\S]{0,40}?(\d{4}-\d{2}-\d{2}\s*[–-]\s*\d{4}-\d{2}-\d{2})/i);
+    var per = text.match(/pay period[\s\S]{0,200}?(\d{4}-\d{2}-\d{2}\s*[–—-]\s*\d{4}-\d{2}-\d{2})/i);
     return mk(gdate, Math.round(parseFloat(gm[1].replace(/,/g, '')) * 100), 'in', 'Paycheck', 'Gusto', per ? 'Pay period ' + per[1].replace(/\s+/g, ' ') : '');
   }
   var amtM = text.match(/\$\s?([\d,]+\.\d{2}|[\d,]+)/);
